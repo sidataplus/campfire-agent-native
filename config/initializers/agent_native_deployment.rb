@@ -1,6 +1,6 @@
 require_relative "../../lib/campfire/deployment"
 
-Rails.application.config.x.agent_native.enabled = false
+Rails.application.config.x.agent_native.enabled = ENV["CAMPFIRE_AGENT_ENABLED"] == "true"
 Rails.application.config.x.agent_native.dispatch_enabled = false
 Rails.application.config.filter_parameters += [ :bootstrap_secret, :campfire_bootstrap_secret, :recovery_epoch ]
 

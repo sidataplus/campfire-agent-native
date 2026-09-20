@@ -1,10 +1,8 @@
 class Session < ApplicationRecord
   ACTIVITY_REFRESH_RATE = 1.hour
-
   has_secure_token
-
   belongs_to :user
-
+  validate { errors.add(:user, "cannot be a native agent") if user&.native_agent? }
   before_create { self.last_active_at ||= Time.now }
 
   def self.start!(user_agent:, ip_address:)
