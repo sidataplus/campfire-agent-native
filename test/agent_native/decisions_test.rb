@@ -72,4 +72,26 @@ class AgentNativeDecisionsTest < ActiveSupport::TestCase
     assert_raises(AgentNative::Error) { AgentNative::ActionInput.validate_schema!({ "$ref" => "https://example.test/schema" }) }
     assert_raises(AgentNative::Error) { AgentNative::ActionInput.validate!({ "type" => "object", "properties" => { "count" => { "type" => "integer", "maximum" => 3 } } }, { "count" => 4 }) }
   end
+
+  test "one human approval cannot authorize multiple operation admissions" do
+    decision = @action.decide!(@human, @decision)
+    input = { "kind" => "admission", "subject" => { "type" => "action", "id" => @action.id },
+      "runtime_operation_id" => "op-1", "result" => "accepted", "evidence" => [],
+      "source_revision" => 1, "decision_receipt_id" => decision.id }
+    first = AgentNative::Receipt.record_runtime!(@profile, input)
+    assert_no_difference "AgentNative::Receipt.count" do
+      assert_raises(AgentNative::Error) do
+        AgentNative::Receipt.record_runtime!(@profile, input.merge("runtime_operation_id" => "op-2"))
+      end
+      assert_raises(AgentNative::Error) do
+        AgentNative::Receipt.record_runtime!(@profile, input.merge("source_revision" => 2))
+      end
+    end
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      AgentNative::Receipt.create!(first.attributes.except("id").merge("runtime_operation_id" => "op-3"))
+    end
+    outcome = AgentNative::Receipt.record_runtime!(@profile, input.merge("kind" => "outcome", "result" => "succeeded", "source_revision" => 2))
+    assert_equal "succeeded", outcome.result
+  end
+
 end
