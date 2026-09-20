@@ -35,13 +35,13 @@ class CreateAgentIdentity < ActiveRecord::Migration[8.2]
       t.string :activation, null: false, default: "explicit"
       t.timestamps
     end
-    add_index :agent_room_grants, [:profile_id, :room_id], unique: true
+    add_index :agent_room_grants, [ :profile_id, :room_id ], unique: true
     create_table :agent_operator_grants, id: :string do |t|
       t.string :profile_id, null: false
       t.references :user, null: false, foreign_key: true
       t.timestamps
     end
-    add_index :agent_operator_grants, [:profile_id, :user_id], unique: true
+    add_index :agent_operator_grants, [ :profile_id, :user_id ], unique: true
     create_table :agent_write_receipts, id: :string do |t|
       t.string :principal, null: false
       t.string :key_digest, null: false
@@ -49,7 +49,7 @@ class CreateAgentIdentity < ActiveRecord::Migration[8.2]
       t.json :result, null: false
       t.timestamps
     end
-    add_index :agent_write_receipts, [:principal, :key_digest], unique: true
+    add_index :agent_write_receipts, [ :principal, :key_digest ], unique: true
     create_table :agent_uploads, id: :string do |t|
       t.string :profile_id, null: false
       t.references :room, null: false, foreign_key: true
@@ -58,7 +58,14 @@ class CreateAgentIdentity < ActiveRecord::Migration[8.2]
       t.datetime :consumed_at
       t.timestamps
     end
-    %i[credentials room_grants operator_grants uploads].each do |name|
+    create_table :agent_message_tombstones, id: :string do |t|
+      t.string :profile_id, null: false
+      t.references :room, null: false, foreign_key: true
+      t.integer :revision, null: false
+      t.timestamps
+    end
+    add_foreign_key :agent_message_tombstones, :agent_profiles, column: :profile_id
+    %i[ credentials room_grants operator_grants uploads ].each do |name|
       add_foreign_key "agent_#{name}", :agent_profiles, column: :profile_id
     end
   end
