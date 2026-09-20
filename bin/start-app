@@ -1,5 +1,5 @@
-#!/bin/bash -e
+#!/bin/bash
+set -euo pipefail
 
-rm -f tmp/pids/server.pid
-./bin/rails db:prepare
-./bin/rails server
+# The supervisor prepares the database before starting either web or workers.
+exec ./bin/rails server
