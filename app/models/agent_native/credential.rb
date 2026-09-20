@@ -4,7 +4,7 @@ class AgentNative::Credential < AgentNative::Record
     allowed = profile.manifest.fetch("requested_scopes")
     raise AgentNative::Error.new("insufficient_scope", 403) unless scopes.is_a?(Array) && (scopes - allowed).empty?
     raw = "acn_#{SecureRandom.urlsafe_base64(32)}"
-    [create!(profile: profile, scopes: scopes.uniq, expires_at: expires_at, token_digest: Digest::SHA256.hexdigest(raw)), raw]
+    [ create!(profile: profile, scopes: scopes.uniq, expires_at: expires_at, token_digest: Digest::SHA256.hexdigest(raw)), raw ]
   end
 
   def usable?
