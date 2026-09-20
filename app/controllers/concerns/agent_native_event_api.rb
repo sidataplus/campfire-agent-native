@@ -22,19 +22,25 @@ module AgentNativeEventApi
     raise AgentNative::Error.new("validation_failed") unless limit.between?(1, 100)
     scanned = AgentNative::Event.where("id > ?", sequence).order(:id).limit(limit).to_a
     next_sequence = scanned.last&.id || sequence
+    scopes = @credential.effective_scopes
     events = scanned.select do |event|
       grant = @profile.room_grants.find_by(room_id: event.room_id)
       next false unless grant && @profile.allowed_rooms.exists?(event.room_id)
-      next false if grant.created_at > event.created_at
+      # Enrollment floors and authority versions, not timestamp precision, bound replay.
       next false if consumer.room_ids.any? && !consumer.room_ids.include?(event.room_id.to_s)
       next false if event.profile_id && event.profile_id != @profile.id
       next false if consumer.event_types.any? && !consumer.event_types.include?(event.kind)
-      next false if event.kind.start_with?("message.") && !@credential.scopes.include?("messages:read")
-      next false if event.kind.start_with?("invocation.") && !@credential.scopes.include?("invocations:read")
-      next false if event.room.direct? && !@credential.scopes.include?("dms:read")
+      next false if event.kind.start_with?("message.") && !scopes.include?("messages:read")
+      next false if event.kind.start_with?("invocation.") && !scopes.include?("invocations:read")
+      required_scope = {
+        "room" => "rooms:read", "run" => "runs:read", "run_message" => "runs:read",
+        "activity" => "runs:read", "artifact" => "attachments:read", "action" => "actions:read", "receipt" => "receipts:read"
+      }[event.resource_type]
+      next false if required_scope && !scopes.include?(required_scope)
+      next false if event.room.direct? && !scopes.include?("dms:read")
       true
     end
-    consumer.update!(delivered: [consumer.delivered, next_sequence].max)
+    consumer.update!(delivered: [ consumer.delivered, next_sequence ].max)
     render json: { events: events.map(&:wire), next_cursor: consumer.cursor(next_sequence),
       has_more: AgentNative::Event.where("id > ?", next_sequence).exists?,
       stream_epoch: consumer.stream_epoch, authorization_version: consumer.authorization_version }
@@ -57,7 +63,9 @@ module AgentNativeEventApi
   end
 
   def list_invocations
-    render json: page(AgentNative::Invocation.where(profile: @profile, room_id: @profile.allowed_rooms.select(:id))) { |i| i.wire }
+    scope = AgentNative::Invocation.where(profile: @profile, room_id: @profile.allowed_rooms.select(:id))
+    scope = scope.where.not(room_id: Rooms::Direct.select(:id)) unless @credential.effective_scopes.include?("dms:read")
+    render json: page(scope) { |i| i.wire }
   end
 
   def get_invocation

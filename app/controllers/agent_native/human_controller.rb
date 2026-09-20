@@ -33,7 +33,7 @@ class AgentNative::HumanController < ApplicationController
 
     def human_write(input)
       AgentNative::WriteReceipt.perform!(principal: "human:#{Current.user.id}", key: request.headers["Idempotency-Key"],
-        fingerprint: Digest::SHA256.hexdigest([request.method, request.path, input].to_json)) { yield }
+        fingerprint: AgentNative::Canonical.digest([ request.method, request.path, input ])) { yield }
     end
 
     def native_problem(error)

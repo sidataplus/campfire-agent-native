@@ -12,7 +12,7 @@ class AgentNative::Invocation < AgentNative::Record
     AgentNative::Contract.validate!("HumanRunInput", input)
     invocation = create!(profile: profile, human_user: human, room: room, normalized_input: input.fetch("body_text"),
       source: source, context: input.fetch("context"), run_id: run_id,
-      source_digest: Digest::SHA256.hexdigest([source, input.fetch("body_text"), input.fetch("context")].to_json),
+      source_digest: AgentNative::Canonical.digest([ source, input.fetch("body_text"), input.fetch("context") ]),
       admission_expires_at: 15.minutes.from_now, stream_epoch: AgentNative::Instance.current.stream_epoch)
     AgentNative::Event.publish!(kind: "invocation.created", resource: invocation, room: room, profile: profile, actor: human)
     invocation
