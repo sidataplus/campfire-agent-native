@@ -44,7 +44,7 @@ class AgentNative::Contract
       return false unless v.valid_encoding?
       return false if v.length < s.fetch("minLength", 0) || v.length > s.fetch("maxLength", 262144)
       return false if s["pattern"] && !Regexp.new(s["pattern"].sub(/\A\^/, "\\A").sub(/\$\z/, "\\z")).match?(v)
-      return false if s["format"] == "uuid" && !v.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+      return false if s["format"] == "uuid" && !v.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
       if s["format"] == "date-time"
         return false unless v.match?(/(?:Z|[+-][0-9]{2}:[0-9]{2})\z/)
         Time.iso8601(v)

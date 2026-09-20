@@ -83,9 +83,16 @@ class AgentNativeAccessTest < ActionDispatch::IntegrationTest
     path = "/api/agent/v1/messages/#{message.id}"
     headers = @headers.merge("If-Match" => %Q("#{message.id}:#{message.agent_revision}"))
     delete path, headers: headers
-    assert_response :no_content
-    delete path, headers: headers
-    assert_response :no_content
+    assert_response :ok
+    assert_equal false, response.parsed_body.fetch("replayed")
+    resource = response.parsed_body.fetch("resource")
+    assert_equal({ "type" => "message", "id" => message.id.to_s }, resource)
+    assert_no_difference [ "Message.count", "AgentNative::MessageTombstone.count", "AgentNative::WriteReceipt.count" ] do
+      delete path, headers: headers
+    end
+    assert_response :ok
+    assert_equal true, response.parsed_body.fetch("replayed")
+    assert_equal resource, response.parsed_body.fetch("resource")
     delete path, headers: headers.merge("Idempotency-Key" => SecureRandom.uuid)
     assert_response :not_found
     @grant.destroy!
@@ -128,5 +135,13 @@ class AgentNativeAccessTest < ActionDispatch::IntegrationTest
   test "schema patterns reject newline suffixes and missing timestamp offsets" do
     refute AgentNative::Contract.valid?({ "type" => "string", "pattern" => "^[0-9]+$" }, "123\ninjection")
     refute AgentNative::Contract.valid?({ "type" => "string", "format" => "date-time" }, "2026-09-20T12:00:00")
+  end
+
+  test "UUID format accepts five groups and rejects malformed four-group values" do
+    schema = { "type" => "string", "format" => "uuid" }
+    assert AgentNative::Contract.valid?(schema, "01234567-89ab-cdef-0123-456789abcdef")
+    assert AgentNative::Contract.valid?(schema, "01234567-89AB-CDEF-0123-456789ABCDEF")
+    refute AgentNative::Contract.valid?(schema, "01234567-89ab-cdef-456789abcdef")
+    refute AgentNative::Contract.valid?(schema, "01234567-89ab-cdef-0123-456789abcdef\n")
   end
 end
