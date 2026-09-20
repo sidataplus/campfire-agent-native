@@ -23,6 +23,9 @@ class AgentNative::Receipt < AgentNative::Record
       raise AgentNative::Error.new("decision_required", 409) unless decision && input["decision_receipt_id"] == decision.id
       if input["kind"] == "admission" && input["result"] == "accepted"
         subject.current_proposal!
+        if where(profile: profile, subject_type: "action", subject_id: subject.id, kind: "admission", result: "accepted").exists?
+          raise AgentNative::Error.new("admission_recorded", 409)
+        end
         human = User.find_by(id: decision.actor_id)
         raise AgentNative::Error.new("forbidden", 403) unless profile.operator?(human, subject.room)
         raise AgentNative::Error.new("decision_rejected", 409) if decision.result == "reject"

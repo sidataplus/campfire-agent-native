@@ -1,7 +1,7 @@
 module AgentNativeActionApi
   def list_actions
     scope = AgentNative::Action.where(profile: @profile, room_id: @profile.allowed_rooms.select(:id))
-    scope = scope.where.not(room_id: Rooms::Direct.select(:id)) unless @credential.scopes.include?("dms:read")
+    scope = scope.where.not(room_id: Rooms::Direct.select(:id)) unless @credential.effective_scopes.include?("dms:read")
     render json: page(scope) { |action| action.wire }
   end
 
