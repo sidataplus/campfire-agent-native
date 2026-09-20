@@ -19,7 +19,7 @@ class AgentNative::ApiController < ActionController::API
   def get_self
     render json: { id: @profile.id, user_id: @profile.user_id.to_s, runtime_id: @profile.runtime_id,
       name: @profile.user.name, enabled: @profile.enabled, capabilities: @profile.manifest.fetch("capabilities"),
-      effective_scopes: @credential.scopes & @profile.manifest.fetch("requested_scopes"), authorization_version: @profile.authorization_version }
+      effective_scopes: @credential.effective_scopes, authorization_version: @profile.authorization_version }
   end
 
   def put_presence
@@ -29,7 +29,7 @@ class AgentNative::ApiController < ActionController::API
   end
 
   def list_rooms
-    render json: page(@profile.allowed_rooms.where.not(type: @credential.scopes.include?("dms:read") ? [] : [ "Rooms::Direct" ])) { |room|
+    render json: page(@profile.allowed_rooms.where.not(type: @credential.effective_scopes.include?("dms:read") ? [] : [ "Rooms::Direct" ])) { |room|
       grant = @profile.room_grants.find_by!(room: room)
       { id: room.id.to_s, name: room.name.to_s, kind: room.direct? ? "direct" : (room.open? ? "open" : "closed"),
         history_policy: grant.history_policy, grant_start_at: grant.created_at.iso8601, activation: grant.activation }
@@ -185,7 +185,7 @@ class AgentNative::ApiController < ActionController::API
 
     def message_json(message)
       attachments = []
-      if @credential.scopes.include?("attachments:read") && message.attachment.attached?
+      if @credential.effective_scopes.include?("attachments:read") && message.attachment.attached?
         attachments << { type: "upload", id: message.attachment_attachment.id.to_s }
       end
       { id: message.id.to_s, room_id: message.room_id.to_s, creator_user_id: message.creator_id.to_s,

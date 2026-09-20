@@ -7,6 +7,10 @@ class AgentNative::Credential < AgentNative::Record
     [ create!(profile: profile, scopes: scopes.uniq, expires_at: expires_at, token_digest: Digest::SHA256.hexdigest(raw)), raw ]
   end
 
+  def effective_scopes
+    scopes & profile.reload.manifest.fetch("requested_scopes")
+  end
+
   def usable?
     revoked_at.nil? && (expires_at.nil? || expires_at.future?)
   end
