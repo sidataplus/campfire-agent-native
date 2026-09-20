@@ -1,0 +1,87 @@
+name: WP01 qualification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: .ruby-version
+      - name: Portable boot and supervisor tests
+        run: ruby -Itest -e 'Dir["test/standalone/*_test.rb"].sort.each { |f| require_relative f }'
+      - name: Check frozen baseline and configuration
+        run: python3 script/ci/check-wp01.py
+      - name: Validate proposed contracts (not implemented endpoints)
+        run: |
+          python3 -m venv /tmp/wp01-contracts
+          /tmp/wp01-contracts/bin/pip install -r docs/agent-native/contracts/requirements.txt
+          /tmp/wp01-contracts/bin/python script/ci/validate-contracts.py
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build without runtime secrets
+        run: docker build --tag campfire:wp01 .
+      - name: Exercise mounted startup, bootstrap, proxy and restart
+        run: python3 script/ci/wp01-container-smoke.py campfire:wp01
+      - name: Record qualification summary
+        if: always()
+        run: |
+          if test -f tmp/wp01/container-report.json; then
+            printf '### WP01 image smoke\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat tmp/wp01/container-report.json >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  upstream-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    services:
+      redis:
+        image: redis:7.4 # zizmor: ignore[unpinned-images] -- test-only service; not deployment image
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      RAILS_ENV: test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PARALLEL_WORKERS: "2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ed0f9a5dba396a2f70e62328c9079929d5df9b46
+          persist-credentials: false
+      - name: Install baseline runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libsqlite3-0 libvips curl ffmpeg
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - name: Baseline unit and integration regressions
+        run: bin/rails db:setup test
+      - name: Baseline system regressions
+        run: bin/rails test:system
+      - name: Baseline security and style
+        run: bin/brakeman && bin/rubocop
+      - name: Build unchanged upstream baseline
+        run: docker build --tag campfire:upstream-wp01 .

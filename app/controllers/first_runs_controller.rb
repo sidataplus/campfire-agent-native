@@ -3,8 +3,8 @@ class FirstRunsController < ApplicationController
 
   before_action :prevent_repeats
   before_action :protect_setup_response
-  before_action :verify_bootstrap_secret, only: :create
   rate_limit to: 10, within: 3.minutes, only: :create
+  before_action :verify_bootstrap_secret, only: :create
 
   def show
     @user = User.new

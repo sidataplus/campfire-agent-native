@@ -48,7 +48,7 @@ module Campfire
         raise Invalid, "CAMPFIRE_RECOVERY_EPOCH must be a random 32-128 character deployment-held identifier"
       end
       bootstrap = env.fetch("CAMPFIRE_BOOTSTRAP_SECRET", "")
-      raise Invalid, "CAMPFIRE_BOOTSTRAP_SECRET must contain at least 32 bytes" if !bootstrap.empty? && bootstrap.bytesize < 32
+      raise Invalid, "CAMPFIRE_BOOTSTRAP_SECRET must contain 32-4096 bytes" if !bootstrap.empty? && !bootstrap.bytesize.between?(32, 4096)
       FLAGS.each do |key|
         raise Invalid, "#{key} must remain false: native agents are not implemented in WP01" unless [ "false", "0" ].include?(env.fetch(key, "false"))
       end
@@ -84,7 +84,7 @@ module Campfire
     def check_storage!(root)
       storage = File.join(root, "storage")
       raise Invalid, "storage must be a real directory" if File.symlink?(storage) || !File.directory?(storage)
-      %w[ db uploads thruster ].each do |name|
+      %w[ db files thruster ].each do |name|
         path = File.join(storage, name)
         raise Invalid, "storage/#{name} must not be a symlink" if File.symlink?(path)
         FileUtils.mkdir_p(path, mode: 0o700)
