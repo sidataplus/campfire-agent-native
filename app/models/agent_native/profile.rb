@@ -19,19 +19,19 @@ class AgentNative::Profile < AgentNative::Record
   end
 
   def operator?(human, room)
-    human&.active? && !human.bot? && human.rooms.exists?(room.id) &&
-      operator_grants.exists?(user_id: human.id)
+    human&.active? && !human.bot? && human.rooms.exists?(room.id) && operator_grants.exists?(user_id: human.id)
   end
 
   def authorize!(credential, scope = nil, room = nil)
     reload
     credential.reload
     raise AgentNative::Error.new("invalid_token", 401) unless enabled && user.reload.active? && credential.usable?
-    raise AgentNative::Error.new("insufficient_scope", 403) if scope && !credential.scopes.include?(scope)
+    approved_scopes = credential.scopes & manifest.fetch("requested_scopes")
+    raise AgentNative::Error.new("insufficient_scope", 403) if scope && !approved_scopes.include?(scope)
     if room
       raise ActiveRecord::RecordNotFound unless allowed_rooms.exists?(room.id)
       needed = scope.to_s.end_with?("read") ? "dms:read" : "dms:write"
-      raise AgentNative::Error.new("insufficient_scope", 403) if room.direct? && scope && !credential.scopes.include?(needed)
+      raise AgentNative::Error.new("insufficient_scope", 403) if room.direct? && scope && !approved_scopes.include?(needed)
     end
   end
 end

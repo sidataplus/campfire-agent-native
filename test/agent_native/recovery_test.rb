@@ -47,9 +47,9 @@ class AgentNativeRecoveryTest < ActiveSupport::TestCase
       epoch = SecureRandom.hex(32)
       db.execute("INSERT INTO agent_instances VALUES(1,'instance','epoch',?,0,NULL)", [ Digest::SHA256.hexdigest(epoch) ])
       key = "abcd1234fixture"
-      content = "synthetic attachment"
+      content = (0..255).to_a.pack("C*") * 8193
       FileUtils.mkdir_p(File.join(files, "ab", "cd"))
-      File.write(File.join(files, "ab", "cd", key), content)
+      File.binwrite(File.join(files, "ab", "cd", key), content)
       db.execute("INSERT INTO active_storage_blobs VALUES(?,?,?,'local')", [ key, content.bytesize, Base64.strict_encode64(Digest::MD5.digest(content)) ])
       db.close
       snapshot = Campfire::Snapshot.new(secret: "s" * 64)
@@ -66,7 +66,7 @@ class AgentNativeRecoveryTest < ActiveSupport::TestCase
       assert_equal [ 1, 2 ], restored_db.get_first_row("SELECT needs_reconciliation, owner_generation FROM agent_runs")
       assert_equal "invalidated", restored_db.get_first_value("SELECT state FROM agent_actions")
       restored_db.close
-      assert_equal content, File.read(File.join(restored, "files", "ab", "cd", key))
+      assert_equal content, File.binread(File.join(restored, "files", "ab", "cd", key))
       assert_raises(Campfire::Snapshot::Invalid) { snapshot.restore!(source: backup, destination: restored, recovery_epoch: SecureRandom.hex(32)) }
       File.write(File.join(backup, "files", "ab", "cd", key), "tampered")
       assert_raises(Campfire::Snapshot::Invalid) { snapshot.verify!(backup) }

@@ -6,6 +6,7 @@ class AgentNative::ApiController < ActionController::API
   rescue_from ActiveRecord::RecordInvalid, ActionController::ParameterMissing, JSON::ParserError,
     with: -> { problem(AgentNative::Error.new("validation_failed", 422)) }
   rescue_from ActiveRecord::RecordNotUnique, with: -> { problem(AgentNative::Error.new("conflict", 409)) }
+  rescue_from ActiveRecord::StatementInvalid, with: :database_problem
 
   def get_instance
     instance = AgentNative::Instance.current
@@ -18,7 +19,7 @@ class AgentNative::ApiController < ActionController::API
   def get_self
     render json: { id: @profile.id, user_id: @profile.user_id.to_s, runtime_id: @profile.runtime_id,
       name: @profile.user.name, enabled: @profile.enabled, capabilities: @profile.manifest.fetch("capabilities"),
-      effective_scopes: @credential.scopes, authorization_version: @profile.authorization_version }
+      effective_scopes: @credential.effective_scopes, authorization_version: @profile.authorization_version }
   end
 
   def put_presence
@@ -28,7 +29,7 @@ class AgentNative::ApiController < ActionController::API
   end
 
   def list_rooms
-    render json: page(@profile.allowed_rooms.where.not(type: @credential.scopes.include?("dms:read") ? [] : ["Rooms::Direct"])) { |room|
+    render json: page(@profile.allowed_rooms.where.not(type: @credential.effective_scopes.include?("dms:read") ? [] : [ "Rooms::Direct" ])) { |room|
       grant = @profile.room_grants.find_by!(room: room)
       { id: room.id.to_s, name: room.name.to_s, kind: room.direct? ? "direct" : (room.open? ? "open" : "closed"),
         history_policy: grant.history_policy, grant_start_at: grant.created_at.iso8601, activation: grant.activation }
@@ -74,8 +75,22 @@ class AgentNative::ApiController < ActionController::API
   end
 
   def delete_own_message
-    message = message!(params[:message_id], "messages:edit_own", own: true)
-    mutate { precondition!(message); resource = ref(message, "message"); message.destroy!; resource }
+    id = params[:message_id].to_s
+    raise AgentNative::Error.new("validation_failed", 422) unless id.match?(/\A[0-9]{1,24}\z/)
+    if Message.exists?(id: id)
+      message = message!(id, "messages:edit_own", own: true)
+      mutate do
+        precondition!(message)
+        resource = ref(message, "message")
+        AgentNative::MessageTombstone.create!(id: message.id.to_s, profile: @profile, room: message.room, revision: message.agent_revision)
+        message.destroy!
+        resource
+      end
+    else
+      tombstone = AgentNative::MessageTombstone.find_by!(id: id, profile: @profile)
+      room!(tombstone.room_id, "messages:edit_own")
+      mutate { raise ActiveRecord::RecordNotFound }
+    end
   end
 
   def get_room_context
@@ -98,9 +113,9 @@ class AgentNative::ApiController < ActionController::API
     file = params.require(:file)
     raise AgentNative::Error.new("validation_failed") unless file.respond_to?(:tempfile) && file.size.between?(1, 26214400)
     filename = params.require(:filename).to_s
-    raise AgentNative::Error.new("validation_failed") unless filename.length.between?(1, 256) && File.basename(filename) == filename
+    raise AgentNative::Error.new("validation_failed") unless filename.length.between?(1, 256) && File.basename(filename) == filename && !filename.match?(/[\x00-\x1f\x7f\\]/)
     digest = Digest::SHA256.file(file.tempfile.path).hexdigest
-    result = write_result(extra: [digest, room.id, filename, params[:content_type]]) do
+    result = write_result(extra: [ digest, room.id, filename, params[:content_type] ]) do
       upload = AgentNative::Upload.create!(profile: @profile, room: room, sha256: digest, expires_at: 1.hour.from_now)
       upload.file.attach(io: file.tempfile, filename: filename, content_type: "application/octet-stream", identify: false)
       ref(upload, "upload")
@@ -112,7 +127,7 @@ class AgentNative::ApiController < ActionController::API
 
   def download_message_attachment
     message = message!(params[:message_id], "attachments:read")
-    attachments = message.attachment_attachment ? [message.attachment_attachment] : []
+    attachments = message.attachment_attachment ? [ message.attachment_attachment ] : []
     attachments += message.rich_text_body&.embeds_attachments&.to_a || []
     attachment = attachments.find { |a| a.id.to_s == params[:attachment_id] }
     raise ActiveRecord::RecordNotFound unless attachment
@@ -121,15 +136,16 @@ class AgentNative::ApiController < ActionController::API
 
   private
     def authorized_request
+      response.set_header("Cache-Control", "no-store")
+      response.set_header("X-Content-Type-Options", "nosniff")
       raise AgentNative::Error.new("not_found", 404) unless AgentNative.enabled?
+      raise AgentNative::Error.new("length_required", 411) if action_name == "upload_file" && request.content_length.nil?
       limit = action_name == "upload_file" ? 26300000 : 262144
       raise AgentNative::Error.new("payload_too_large", 413) if request.content_length.to_i > limit
       match = request.authorization.to_s.match(/\ABearer (acn_[A-Za-z0-9_-]{43})\z/)
       @credential = AgentNative::Credential.authenticate(match && match[1])
       raise AgentNative::Error.new("invalid_token", 401) unless @credential
       @profile = @credential.profile
-      response.set_header("Cache-Control", "no-store")
-      response.set_header("X-Content-Type-Options", "nosniff")
       @operation = CATALOG.fetch(action_name)
       AgentNative::Instance.current.with_lock do
         AgentNative::Instance.current.touch
@@ -148,6 +164,7 @@ class AgentNative::ApiController < ActionController::API
     end
 
     def room!(id, scope)
+      raise AgentNative::Error.new("validation_failed", 422) unless id.to_s.match?(/\A[0-9]{1,24}\z/)
       room = @profile.allowed_rooms.find(id)
       @profile.authorize!(@credential, scope, room)
       room
@@ -160,6 +177,7 @@ class AgentNative::ApiController < ActionController::API
     end
 
     def message!(id, scope, own: false)
+      raise AgentNative::Error.new("validation_failed", 422) unless id.to_s.match?(/\A[0-9]{1,24}\z/)
       message = Message.find(id)
       room = room!(message.room_id, scope)
       raise ActiveRecord::RecordNotFound unless (own && message.creator_id == @profile.user_id) || history(room).exists?(message.id)
@@ -169,7 +187,7 @@ class AgentNative::ApiController < ActionController::API
 
     def message_json(message)
       attachments = []
-      if @credential.scopes.include?("attachments:read") && message.attachment.attached?
+      if @credential.effective_scopes.include?("attachments:read") && message.attachment.attached?
         attachments << { type: "upload", id: message.attachment_attachment.id.to_s }
       end
       { id: message.id.to_s, room_id: message.room_id.to_s, creator_user_id: message.creator_id.to_s,
@@ -204,11 +222,11 @@ class AgentNative::ApiController < ActionController::API
     end
 
     def page_purpose
-      Digest::SHA256.hexdigest([@profile.id, @profile.authorization_version, request.path, params.except(:cursor, :controller, :action).to_unsafe_h.sort].to_json)
+      Digest::SHA256.hexdigest([ @profile.id, @profile.authorization_version, request.path, params.except(:cursor, :controller, :action).to_unsafe_h.sort ].to_json)
     end
 
     def write_result(extra: nil)
-      fingerprint = Digest::SHA256.hexdigest([request.method, request.path, @input, extra, request.headers["If-Match"]].to_json)
+      fingerprint = AgentNative::Canonical.digest([ request.method, request.path, @input, extra, request.headers["If-Match"] ])
       AgentNative::WriteReceipt.perform!(principal: @profile.id, key: request.headers["Idempotency-Key"], fingerprint: fingerprint) { yield }
     end
 
@@ -223,6 +241,12 @@ class AgentNative::ApiController < ActionController::API
     def send_blob(blob)
       raise AgentNative::Error.new("payload_too_large", 413) if blob.byte_size > 26214400
       send_data blob.download, filename: blob.filename.to_s, type: "application/octet-stream", disposition: "attachment"
+    end
+
+    def database_problem(error)
+      raise error unless error.cause.is_a?(SQLite3::BusyException) || error.cause.is_a?(SQLite3::LockedException)
+      response.set_header("Retry-After", "1")
+      problem(AgentNative::Error.new("temporarily_unavailable", 503))
     end
 
     def problem(error)

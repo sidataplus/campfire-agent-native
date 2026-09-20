@@ -13,8 +13,8 @@ class CreateAgentEvents < ActiveRecord::Migration[8.2]
       t.timestamps
     end
     add_index :agent_events, :event_uuid, unique: true
-    add_index :agent_events, [:profile_id, :id]
-    add_index :agent_events, [:room_id, :id]
+    add_index :agent_events, [ :profile_id, :id ]
+    add_index :agent_events, [ :room_id, :id ]
     create_table :agent_consumers, id: :string do |t|
       t.string :profile_id, null: false
       t.string :name, null: false
@@ -27,7 +27,7 @@ class CreateAgentEvents < ActiveRecord::Migration[8.2]
       t.string :stream_epoch, null: false
       t.timestamps
     end
-    add_index :agent_consumers, [:profile_id, :name], unique: true
+    add_index :agent_consumers, [ :profile_id, :name ], unique: true
     add_foreign_key :agent_consumers, :agent_profiles, column: :profile_id
     create_table :agent_invocations, id: :string do |t|
       t.string :profile_id, null: false
@@ -46,7 +46,7 @@ class CreateAgentEvents < ActiveRecord::Migration[8.2]
       t.timestamps
     end
     add_foreign_key :agent_invocations, :agent_profiles, column: :profile_id
-    add_index :agent_invocations, [:profile_id, :runtime_operation_id], unique: true
+    add_index :agent_invocations, [ :profile_id, :runtime_operation_id ], unique: true
     uuid = "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6)))"
     %w[INSERT UPDATE DELETE].each do |operation|
       row = operation == "DELETE" ? "OLD" : "NEW"

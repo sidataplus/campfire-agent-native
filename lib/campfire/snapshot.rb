@@ -189,8 +189,10 @@ module Campfire
         FileUtils.mkdir_p(File.dirname(target), mode: 0o700)
         sha, md5, size = Digest::SHA256.new, Digest::MD5.new, 0
         File.open(source, File::RDONLY | File::NOFOLLOW) do |input|
+          input.binmode
           raise Invalid, "Snapshot source is not a regular file" unless input.stat.file?
           File.open(target, File::WRONLY | File::CREAT | File::EXCL | File::NOFOLLOW, 0o600) do |output|
+            output.binmode
             while chunk = input.read(1_048_576)
               output.write(chunk)
               sha.update(chunk)

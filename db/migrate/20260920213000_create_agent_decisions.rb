@@ -46,6 +46,8 @@ class CreateAgentDecisions < ActiveRecord::Migration[8.2]
     add_foreign_key :agent_receipts, :agent_profiles, column: :profile_id
     add_index :agent_receipts, [ :profile_id, :runtime_operation_id, :source_revision ], unique: true, name: "agent_receipt_runtime_revision"
     add_index :agent_receipts, [ :subject_type, :subject_id ], unique: true, where: "kind = 'human_intent'", name: "agent_single_human_intent"
+    add_index :agent_receipts, [ :profile_id, :subject_type, :subject_id ], unique: true,
+      where: "subject_type = 'action' AND kind = 'admission' AND result = 'accepted'", name: "agent_single_action_admission"
     create_table :agent_attention_reads, id: :string do |t|
       t.references :user, null: false, foreign_key: true
       t.string :item_id, null: false

@@ -6,7 +6,7 @@ module AgentNativeRunApi
   def list_runs
     scope = AgentNative::Run.visible_to(@profile)
     scope = scope.where(room: room!(params[:room_id], "runs:read")) if params[:room_id]
-    scope = scope.where.not(room_id: Rooms::Direct.select(:id)) unless @credential.scopes.include?("dms:read")
+    scope = scope.where.not(room_id: Rooms::Direct.select(:id)) unless @credential.effective_scopes.include?("dms:read")
     render json: page(scope) { |run| run.wire }
   end
 
