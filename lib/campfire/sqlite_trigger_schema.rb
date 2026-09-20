@@ -1,5 +1,5 @@
 module Campfire
-  module SQLiteTriggerSchema
+  module SqliteTriggerSchema
     private
       def trailer(stream)
         if @connection.adapter_name == "SQLite"
@@ -9,4 +9,6 @@ module Campfire
         super
       end
   end
+  # Preserve the explicit initializer reference while honoring Zeitwerk inflection.
+  SQLiteTriggerSchema = SqliteTriggerSchema
 end
