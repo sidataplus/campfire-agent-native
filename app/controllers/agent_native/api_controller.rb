@@ -75,8 +75,10 @@ class AgentNative::ApiController < ActionController::API
   end
 
   def delete_own_message
-    if Message.exists?(params[:message_id])
-      message = message!(params[:message_id], "messages:edit_own", own: true)
+    id = params[:message_id].to_s
+    raise AgentNative::Error.new("validation_failed", 422) unless id.match?(/\A[0-9]{1,24}\z/)
+    if Message.exists?(id: id)
+      message = message!(id, "messages:edit_own", own: true)
       mutate do
         precondition!(message)
         resource = ref(message, "message")
@@ -85,7 +87,7 @@ class AgentNative::ApiController < ActionController::API
         resource
       end
     else
-      tombstone = AgentNative::MessageTombstone.find_by!(id: params[:message_id], profile: @profile)
+      tombstone = AgentNative::MessageTombstone.find_by!(id: id, profile: @profile)
       room!(tombstone.room_id, "messages:edit_own")
       mutate { raise ActiveRecord::RecordNotFound }
     end
