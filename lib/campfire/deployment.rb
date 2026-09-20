@@ -91,7 +91,10 @@ module Campfire
       end
       probe = File.join(storage, ".preflight-#{SecureRandom.hex(12)}")
       begin
-        File.open(probe, File::WRONLY | File::CREAT | File::EXCL, 0o600) { |file| file.write("ok"); file.fsync }
+        File.open(probe, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |probe_file|
+          probe_file.write("ok")
+          probe_file.fsync
+        end
       ensure
         File.unlink(probe) if File.exist?(probe)
       end

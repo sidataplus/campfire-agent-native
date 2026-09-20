@@ -57,8 +57,16 @@ class Wp01BootstrapControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, Account.count
   end
 
+  test "blank initial email and password do not consume setup" do
+    %i[ email_address password ].each do |attribute|
+      post first_run_url, params: { user: @user.merge(attribute => ""), bootstrap_secret: @secret }
+      assert_response :unprocessable_entity
+      assert_equal 0, Account.count
+      assert_equal 0, User.count
+    end
+  end
+
   test "invalid setup attempts are rate limited before secret verification" do
-    # The macro captures this store when the controller class loads.
     FirstRunsController.cache_store.stubs(:increment).returns(*(1..11).to_a)
     10.times do
       post first_run_url, params: { user: @user, bootstrap_secret: "incorrect" }

@@ -47,9 +47,11 @@ jobs:
         if: always()
         run: |
           if test -f tmp/wp01/container-report.json; then
-            printf '### WP01 image smoke\n```json\n' >> "$GITHUB_STEP_SUMMARY"
-            cat tmp/wp01/container-report.json >> "$GITHUB_STEP_SUMMARY"
-            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+            {
+              printf '### WP01 image smoke\n```json\n'
+              cat tmp/wp01/container-report.json
+              printf '\n```\n'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   upstream-baseline:
