@@ -3,6 +3,7 @@ require "test_helper"
 class AgentNativeEventAccessTest < ActionDispatch::IntegrationTest
   setup do
     Rails.configuration.x.agent_native.enabled = true
+    AgentNative::Instance.current.update!(recovery_required: false)
     @room = rooms(:watercooler)
     @scopes = AgentNative::Contract::DEFINITIONS.fetch("Scope").fetch("enum")
     capabilities = { "modes" => [ "interactive" ], "supports_cancel" => false, "supports_pause" => false,
@@ -44,5 +45,15 @@ class AgentNativeEventAccessTest < ActionDispatch::IntegrationTest
     get "/api/agent/v1/events", params: { consumer_id: @consumer.id, cursor: old_cursor }, headers: @headers
     assert_response :conflict
     assert_equal "access_changed", response.parsed_body.fetch("code")
+  end
+
+  test "recovery quarantine blocks replay without advancing the consumer" do
+    AgentNative::Instance.current.update!(recovery_required: true)
+    previous = @consumer.delivered
+    Message.create!(room: @room, creator: users(:david), body: "quarantined")
+    get "/api/agent/v1/events", params: { consumer_id: @consumer.id, cursor: @consumer.cursor }, headers: @headers
+    assert_response :conflict
+    assert_equal "recovery_required", response.parsed_body.fetch("code")
+    assert_equal previous, @consumer.reload.delivered
   end
 end
