@@ -93,5 +93,4 @@ class AgentNativeDecisionsTest < ActiveSupport::TestCase
     outcome = AgentNative::Receipt.record_runtime!(@profile, input.merge("kind" => "outcome", "result" => "succeeded", "source_revision" => 2))
     assert_equal "succeeded", outcome.result
   end
-
 end
