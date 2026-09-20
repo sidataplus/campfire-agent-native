@@ -14,7 +14,7 @@ begin
   exit Campfire::ProcessSupervisor.new(
     commands: commands,
     prepare: [ "bin/rails", "db:prepare" ],
-    after_prepare: [ "bin/rails", "runner", "Campfire::Bootstrap.check_startup!" ]
+    after_prepare: [ "bin/rails", "runner", "Campfire::Bootstrap.check_startup!; AgentNative::Maintenance.startup!" ]
   ).run
 rescue Campfire::Deployment::Invalid => error
   abort "Campfire preflight failed: #{error.message}"
