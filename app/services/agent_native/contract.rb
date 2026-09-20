@@ -43,15 +43,18 @@ class AgentNative::Contract
     when String
       return false unless v.valid_encoding?
       return false if v.length < s.fetch("minLength", 0) || v.length > s.fetch("maxLength", 262144)
-      return false if s["pattern"] && !Regexp.new(s["pattern"]).match?(v)
+      return false if s["pattern"] && !Regexp.new(s["pattern"].sub(/\A\^/, "\\A").sub(/\$\z/, "\\z")).match?(v)
       return false if s["format"] == "uuid" && !v.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
-      Time.iso8601(v) if s["format"] == "date-time"
+      if s["format"] == "date-time"
+        return false unless v.match?(/(?:Z|[+-][0-9]{2}:[0-9]{2})\z/)
+        Time.iso8601(v)
+      end
       return false if s["format"] == "uri" && !URI.parse(v).absolute?
     when Numeric
       return false if v < s.fetch("minimum", -Float::INFINITY) || v > s.fetch("maximum", Float::INFINITY)
     end
     true
-  rescue ArgumentError, URI::InvalidURIError, KeyError
+  rescue ArgumentError, URI::InvalidURIError, KeyError, TypeError
     false
   end
 end
