@@ -15,9 +15,9 @@ threads min_threads_count, max_threads_count
 #
 worker_timeout 3600 if ENV.fetch("RAILS_ENV", "development") == "development"
 
-# Bind http listener.
+# Only Thrust should reach Puma in the qualified TLS-terminating proxy profiles.
 PORT=ENV.fetch("PORT", 3000)
-bind "tcp://0.0.0.0:#{PORT}"
+bind "tcp://#{ENV['CAMPFIRE_PROXY_MODE'] ? '127.0.0.1' : '0.0.0.0'}:#{PORT}"
 
 # Specifies the `environment` that Puma will run in.
 #

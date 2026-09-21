@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+cd /rails
+
+# A missing mount must not silently become an ephemeral production database.
+[ ! -L /rails/storage ] || { echo "storage must not be a symlink" >&2; exit 1; }
+mountpoint -q /rails/storage || { echo "Mount a persistent volume at /rails/storage" >&2; exit 1; }
+
+if [ "$(id -u)" = 0 ]; then
+  # Only runtime storage is repaired. Never chown the image, secrets or arbitrary paths.
+  find -P /rails/storage -xdev \( -type d -o -type f \) ! -user 1000 \
+    -exec chown --no-dereference 1000:1000 {} +
+  chmod 700 /rails/storage
+  exec setpriv --reuid=1000 --regid=1000 --init-groups --no-new-privs "$@"
+fi
+[ "$(id -u)" = 1000 ] || { echo "Use application UID 1000" >&2; exit 1; }
+[ -w /rails/storage ] || { echo "storage is not writable by UID 1000" >&2; exit 1; }
+exec "$@"

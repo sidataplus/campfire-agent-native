@@ -1,0 +1,36 @@
+{
+  "work_package": "WP01",
+  "qualification_status": "candidate-not-production-qualified",
+  "upstream_repository": "basecamp/once-campfire",
+  "fork_repository": "sidataplus/campfire-agent-native",
+  "baseline_commit": "ed0f9a5dba396a2f70e62328c9079929d5df9b46",
+  "baseline_tree": "351b592f2f54135a3af21c7e773eaf9785944b2a",
+  "previous_plan_audit_commit": "977cbcd135783e09d631301bc39cbb4e7961ec4e",
+  "lineage_tag": "v1.4.9",
+  "lineage_tag_commit": "2aa4141077141335e79cb0eac5a0eec1a57b2772",
+  "baseline_policy_exception": "Pinned audited-main intake, not a floating deployment. Current fork includes upstream PR279, an attachment-test correction, after the plan audit. A stable release is not claimed for this commit.",
+  "ruby_version": "3.4.10",
+  "rails_version": "8.2.0.alpha",
+  "thruster_version": "0.1.23",
+  "gemfile_lock_git_blob_sha": "731f2453259375d4b5bd67ea830c396d1735e77b",
+  "plan_audit_correction": "The live Gemfile.lock blob was reread from the exact baseline. This recorded blob supersedes a mismatched blob identifier in the planning source-lock. Gemfile.lock itself is unchanged.",
+  "git_dependencies": {
+    "https://github.com/basecamp/surfguard.git": "910be917fd0ab782c5ea939698d44f26694a501d",
+    "https://github.com/hotwired/turbo-rails.git": "30cd8fcc6f82c1ad4edd1ed6069ba878f21f02b3",
+    "https://github.com/rails/importmap-rails.git": "51c1a531327fc04ed4552bb0fd523eb43561b817",
+    "https://github.com/rails/propshaft.git": "e49a9de659ff27462015e54dd832e86e762a6ddc",
+    "https://github.com/rails/rails.git": "1a02651ac37fb64b4de2a2b73461d86acf9c98fb"
+  },
+  "contract_version": "0.1.0",
+  "python_contract_validation": "CPython 3.12; documentation tooling only, no runtime client shipped in WP01",
+  "new_database_migrations": [],
+  "release_requirements": [
+    "Upstream and fork unit/system/security outcomes recorded",
+    "Baseline and fork image builds pass",
+    "Mounted startup, secret handling, proxy, websocket and restart smoke passes",
+    "Browser/PWA notifications and human chat/file regression verified",
+    "Image/base-image digests and dependency scan evidence retained",
+    "Operator completes backup/restore and rollback rehearsal"
+  ],
+  "reproducibility_limit": "Ruby, gems and Git dependencies are pinned. The Ruby image tag and apt repositories are not immutable snapshots. Retain actual image/base digests; do not claim bit-for-bit rebuilds or an SBOM/attestation that was not produced."
+}

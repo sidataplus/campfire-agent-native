@@ -1,0 +1,22 @@
+{
+  "contract_version": "0.1.0",
+  "wire_version": "1",
+  "status": "frozen-design-not-implemented",
+  "source_archive": "agent-campfire-implementation-plan-v0.1.0.zip",
+  "source_archive_sha256": "7d57c3dba2926fee1a9b12e9a8f201e37c4ebc6613c9e8d586ef576735307aad",
+  "normalization": "Whitespace-only JSON normalization. OpenAPI component schemas are generated from schemas.json with local-reference rewriting; the assembled document must match the source canonical hash. No API semantics changed.",
+  "source_sha256": {
+    "schemas.json": "6d6e5c387a63a0733e74996a8964fd611b3354ed7221122748fa60d906a72d5d",
+    "operations.json": "71676e954c5b38360772c64ed19ed144748906b92f929630521573006b1f635b",
+    "fixtures.json": "7ef2a0edd75916bf89908ba6c890426e4249142ace8e32cf79064b6f68f8ce23",
+    "state-machines.json": "e93ce3a1ee09280e739b85f9f5463cdab1a052916433b3ff0c5396a822a0971c",
+    "openapi.yaml": "c8aef65c832d3a20523e2d00da29265bf771ed26f0fb79a18f956326f8ff870b"
+  },
+  "canonical_sha256": {
+    "schemas.json": "8e717ac281dbd637ad1ff0672438c492ba7ab090225e6aed49ece0e5e58f04e8",
+    "operations.json": "30728291af29cb6df9f988dfd081cb30838d245a71588438e852e48dedfbcc43",
+    "fixtures.json": "b2efeedb2289572755fe61bc059ed9f31c17133df6015bb05bcb371a4ce667d6",
+    "state-machines.json": "42a9924a74573c554505d7f9dd8f5acd29c2ef157b6a9e8babf2b1bea3f1eda4",
+    "openapi.yaml": "6e6f2021bfd48964e2964ca6ed1f73e4630f002d708fd9d3758d7f12250f80e1"
+  }
+}
