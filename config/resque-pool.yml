@@ -1,1 +1,1 @@
-default: <%= (Concurrent.processor_count * 0.5).ceil %>
+default: <%= ENV.fetch("JOB_CONCURRENCY", "1") %>

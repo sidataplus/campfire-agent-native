@@ -1,5 +1,6 @@
 require "minitest/autorun"
 require "tmpdir"
+require "erb"
 require_relative "../../lib/campfire/deployment"
 
 class DeploymentTest < Minitest::Test
@@ -94,6 +95,15 @@ class DeploymentTest < Minitest::Test
       assert_raises(Campfire::Deployment::Invalid) { Campfire::Deployment.new(@env.merge("WEB_CONCURRENCY" => count)).validate! }
       assert_raises(Campfire::Deployment::Invalid) { Campfire::Deployment.new(@env.merge("JOB_CONCURRENCY" => count)).validate! }
     end
+  end
+
+  def test_resque_pool_uses_deployment_concurrency
+    template = ERB.new(File.read(File.expand_path("../../config/resque-pool.yml", __dir__)))
+    previous = ENV["JOB_CONCURRENCY"]
+    ENV["JOB_CONCURRENCY"] = "3"
+    assert_equal "default: 3\n", template.result
+  ensure
+    ENV["JOB_CONCURRENCY"] = previous
   end
 
   def test_vapid_pair_is_mathematically_checked
