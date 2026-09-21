@@ -1,0 +1,39 @@
+<% @page_title = @run.title %>
+<% content_for :nav do %><%= link_to "Agent workspace", "/agent/workspace" %><% end %>
+<section class="agent-workspace">
+  <header><h1><%= @run.title %></h1><p><strong>Owner:</strong> <%= native_profile_name(@run.owner_profile_id) %></p></header>
+  <article class="agent-card" aria-label="Run status">
+    <p><strong>Reported execution:</strong> <%= @run.state.humanize %> · updated <%= time_ago_in_words(@run.last_reported_at) %> ago</p>
+    <p><strong>Connection observation:</strong> <%= @presence ? @presence.fetch("state", "Recently observed") : "Unknown or observation expired" %></p>
+    <p>Connection loss does not confirm that work stopped. <%= link_to "Refresh observations", "/agent/workspace/runs/#{@run.id}" %></p>
+    <% if @progress %><p role="status"><strong>Transient progress:</strong> <%= @progress["label"] %></p><% end %>
+    <% if @run.needs_reconciliation %><p class="agent-warning">Recovery reconciliation is required. Do not start a duplicate run to guess the outcome.</p><% end %>
+    <% if @run.summary.present? %><p class="agent-text"><%= @run.summary %></p><% end %>
+    <details><summary>Execution references</summary><p>Runtime: <code><%= @run.runtime_id %></code></p><p>External run: <code><%= @run.external_run_id %></code></p><p>Generation <%= @run.owner_generation %>; source revision <%= @run.source_revision %>; collaboration version <%= @run.version %>.</p></details>
+  </article>
+  <% if @actions.any? %><h2>Needs a human decision</h2><% end %>
+  <% @actions.each do |action| %><article class="agent-card"><h3><%= action.title %></h3><%= render "action", action: action %></article><% end %>
+  <% if @receipts.any? %><details><summary>Control and decision receipts</summary><% @receipts.each do |receipt| %><p><%= receipt.kind.humanize %> · <%= receipt.result.humanize %> · <%= time_tag receipt.created_at %></p><% end %></details><% end %>
+  <h2>Run conversation</h2>
+  <p>Messages here are bound to this run, not to another task in the same room.</p>
+  <% @messages.each do |message| %><article class="agent-card"><p><strong><%= message.author_kind == "agent" ? native_profile_name(message.author_id) : User.find_by(id: message.author_id)&.name || "Former participant" %></strong> · <%= time_tag message.created_at %></p><p class="agent-text"><%= message.body_text %></p></article><% end %>
+  <% if @can_direct && !@run.terminal? && @run.owner_profile.manifest.dig("capabilities", "supports_followup") %>
+    <%= form_with url: "/agent/workspace/runs/#{@run.id}/requests", data: { turbo: false }, class: "agent-form" do |form| %>
+      <%= hidden_field_tag :request_key, SecureRandom.uuid %><%= hidden_field_tag :profile_id, @run.owner_profile_id %>
+      <%= form.label :body_text, "Follow-up for this run" %><%= form.text_area :body_text, rows: 3, required: true, maxlength: 16000 %>
+      <%= form.submit "Record follow-up", class: "btn", disabled: !AgentNative::Instance.current.dispatch_allowed? %>
+    <% end %>
+  <% end %>
+  <h2>Artifacts</h2>
+  <% @artifacts.each do |artifact| %><article class="agent-card"><strong><%= artifact.title %></strong><p>Published by <%= native_profile_name(artifact.publisher_profile_id) %>. This is attribution, not independent validation.</p>
+    <% if artifact.kind == "local" %><%= link_to "Download artifact", "/agent/workspace/artifacts/#{artifact.id}/content", data: { turbo: false } %><% else %><%= link_to "Open external artifact", artifact.external_uri, target: "_blank", rel: "noopener noreferrer" %><% end %>
+    <% if artifact.sha256 %><p class="agent-digest">SHA-256: <code><%= artifact.sha256 %></code></p><% end %></article><% end %>
+  <h2>Activity</h2>
+  <p>Reported operations, not private model reasoning. The most recent 100 operations are shown.</p>
+  <% @activities.each do |activity| %><details class="agent-card"><summary><%= activity.operation["summary"] %> · <%= activity.operation["state"] %></summary><p>Reported by <%= native_profile_name(activity.profile_id) %> · <%= activity.operation["kind"] %></p><p class="agent-text"><%= activity.operation["detail"] %></p><% activity.operation.fetch("evidence", []).each do |reference| %><p><%= native_reference_label(reference) %></p><% end %></details><% end %>
+  <details><summary>Selected context references</summary><% @run.context.fetch("references").each do |reference| %><p><%= native_reference_label(reference) %></p><% end %><p>Unavailable or changed references are not silently replaced when an integration resolves context.</p></details>
+  <% if @can_direct && !@run.terminal? %><h2>Run controls</h2><p>These request a control operation. The runtime must acknowledge it.</p><div class="agent-controls">
+    <% %w[cancel pause resume].each do |control| %><% if @run.owner_profile.manifest.dig("capabilities", "supports_#{control}") %>
+      <%= button_to "Request #{control}", "/agent/workspace/runs/#{@run.id}/control", params: { request_key: SecureRandom.uuid, control: control, version: @run.version }, class: "btn", disabled: !AgentNative::Instance.current.dispatch_allowed? || @run.needs_reconciliation %>
+    <% end %><% end %></div><% end %>
+</section>

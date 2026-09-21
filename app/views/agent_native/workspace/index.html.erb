@@ -1,0 +1,31 @@
+<% @page_title = "Agent workspace" %>
+<% content_for :nav do %><%= link_to "Back to chat", root_path %><% end %>
+<section class="agent-workspace">
+  <header><h1>Agent workspace</h1><p>External integrations do the work. This workspace records requests, reported activity and human decisions.</p></header>
+  <% if Current.user.administrator? %><p><%= link_to "Manage integrations", "/agent/admin" %></p><% end %>
+  <% unless AgentNative::Instance.current.dispatch_allowed? %><p class="agent-warning" role="status">Native dispatch is disabled or recovery review is required. Existing records remain visible.</p><% end %>
+  <h2>Needs your attention</h2>
+  <% if @attention.empty? %><p>No pending decisions.</p><% end %>
+  <% @attention.each do |item| %>
+    <% action = AgentNative::Action.find(item[:action_id]) %>
+    <article class="agent-card"><h3><%= action.title %></h3><p><%= native_profile_name(action.profile_id) %> · <%= action.kind %><%= " · read" if item[:read] %></p>
+      <%= render "action", action: action %>
+      <%= button_to "Mark read without resolving", "/agent/workspace/actions/#{action.id}/read", class: "btn" %>
+    </article>
+  <% end %>
+  <% if @recovery.any? %><h2>Recovery review</h2><p>These runs need reconciliation against the external runtime journal, not a retry.</p><% end %>
+  <% @recovery.each do |run| %><p><%= link_to run.title, "/agent/workspace/runs/#{run.id}" %></p><% end %>
+  <h2>Recent runs</h2>
+  <% @runs.each do |run| %>
+    <article class="agent-card"><h3><%= link_to run.title, "/agent/workspace/runs/#{run.id}" %></h3><p><%= native_profile_name(run.owner_profile_id) %> · reported <%= run.state.humanize.downcase %> · <%= time_ago_in_words(run.last_reported_at) %> ago</p></article>
+  <% end %>
+  <h2>Send an explicit request</h2>
+  <%= form_with url: "/agent/workspace/requests", data: { turbo: false }, class: "agent-form" do |form| %>
+    <%= hidden_field_tag :request_key, SecureRandom.uuid %>
+    <%= form.label :profile_id, "Integration" %><%= form.select :profile_id, @profiles.map { |p| [p.user.name, p.id] } %>
+    <%= form.label :room_id, "Conversation" %><%= form.select :room_id, @rooms.map { |r| [r.name.presence || "Direct conversation", r.id] } %>
+    <%= form.label :body_text, "Request" %><%= form.text_area :body_text, required: true, maxlength: 16000, rows: 4 %>
+    <p>The integration must have both room access and permission to accept your instructions. Ordinary chat does not start work.</p>
+    <%= form.submit "Record request", class: "btn", disabled: !AgentNative::Instance.current.dispatch_allowed? %>
+  <% end %>
+</section>

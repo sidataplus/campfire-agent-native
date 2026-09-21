@@ -1,0 +1,25 @@
+<p class="agent-text"><%= action.description %></p>
+<p>Expires <%= time_tag action.expires_at %>. This decision applies only to the displayed proposal.</p>
+<details><summary>Proposal and references</summary><pre><%= JSON.pretty_generate(action.arguments) %></pre><% action.subject_references.each do |reference| %><p><%= native_reference_label(reference) %></p><% end %><code><%= action.proposal_digest %></code></details>
+<%= form_with url: "/agent/workspace/actions/#{action.id}/decision", data: { turbo: false }, class: "agent-form" do |form| %>
+  <%= hidden_field_tag :request_key, SecureRandom.uuid %><%= hidden_field_tag :version, action.version %><%= hidden_field_tag :proposal_digest, action.proposal_digest %>
+  <% action.input_schema.fetch("properties", {}).each do |name, field| %>
+    <% input_id = "action-#{action.id}-#{name}" %>
+    <%= label_tag input_id, field.fetch("title", name.humanize) %>
+    <% required = action.input_schema.fetch("required", []).include?(name) %>
+    <% if field["enum"] %>
+      <%= select_tag "fields[#{name}]", options_for_select(field["enum"].map { |v| [v.to_s, v.to_s] }), id: input_id, required: required %>
+    <% elsif field["type"] == "boolean" %>
+      <%= select_tag "fields[#{name}]", options_for_select([["No", "false"], ["Yes", "true"]]), id: input_id, required: required %>
+    <% elsif %w[integer number].include?(field["type"]) %>
+      <%= number_field_tag "fields[#{name}]", nil, id: input_id, required: required, min: field["minimum"], max: field["maximum"], step: field["type"] == "integer" ? 1 : "any" %>
+    <% else %>
+      <%= text_area_tag "fields[#{name}]", nil, id: input_id, required: required, maxlength: field.fetch("maxLength", 4096), rows: 3 %>
+    <% end %>
+    <% if field["description"] %><p><%= field["description"] %></p><% end %>
+  <% end %>
+  <div class="agent-controls">
+    <%= button_tag(action.kind == "question" ? "Send response" : "Approve this proposal", name: "decision", value: action.kind == "question" ? "respond" : "approve", class: "btn", disabled: !AgentNative::Instance.current.dispatch_allowed?) %>
+    <%= button_tag "Reject", name: "decision", value: "reject", class: "btn", formnovalidate: true, disabled: !AgentNative::Instance.current.dispatch_allowed? %>
+  </div>
+<% end %>

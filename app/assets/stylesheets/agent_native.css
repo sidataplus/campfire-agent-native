@@ -1,0 +1,16 @@
+.agent-workspace { width: min(60rem, 100%); margin-inline: auto; padding: 1.5rem; overflow-wrap: anywhere; overflow-y: auto; }
+.agent-workspace h1 { font-size: 1.7rem; margin-block: .5rem 1rem; }
+.agent-workspace h2 { font-size: 1.25rem; margin-block: 1.75rem .75rem; }
+.agent-workspace h3 { font-size: 1.05rem; margin-block: .25rem .5rem; }
+.agent-workspace p { margin-block: .5rem; }
+.agent-card { border: 1px solid currentColor; border-radius: .6rem; padding: 1rem; margin-block: .75rem; }
+.agent-form { display: grid; gap: .65rem; margin-block: 1rem; }
+.agent-form input, .agent-form select, .agent-form textarea { width: 100%; min-height: 2.75rem; padding: .5rem; font: inherit; border: 1px solid currentColor; border-radius: .35rem; background: inherit; color: inherit; }
+.agent-form input[type=checkbox] { width: auto; }
+.agent-controls { display: flex; flex-wrap: wrap; gap: .75rem; }
+.agent-text { white-space: pre-wrap; }
+.agent-digest, .agent-workspace pre { overflow-wrap: anywhere; white-space: pre-wrap; font-size: .85rem; }
+.agent-warning { border-inline-start: .3rem solid currentColor; padding-inline-start: .75rem; font-weight: 600; }
+.agent-workspace summary, .agent-workspace button, .agent-workspace a { min-height: 2.75rem; }
+.agent-workspace :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (max-width: 40rem) { .agent-workspace { padding: .85rem; } .agent-controls { flex-direction: column; } }
