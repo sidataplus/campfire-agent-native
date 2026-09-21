@@ -31,7 +31,13 @@ class ProcessSupervisorTest < Minitest::Test
       output = File.join(root, "output")
       pid = Process.spawn({ "TEST_LOG" => log }, RbConfig.ruby, runner, out: output, err: output)
       if stop
-        Timeout.timeout(5) { sleep 0.02 until File.exist?(log) && File.read(log).include?("web") }
+        Timeout.timeout(10) do
+          loop do
+            events = File.exist?(log) ? File.readlines(log, chomp: true) : []
+            break if %w[ redis prepare check workers web ].all? { |name| events.include?(name) }
+            sleep 0.02
+          end
+        end
         Process.kill("TERM", pid)
       end
       status = Timeout.timeout(5) { Process.waitpid2(pid).last }
