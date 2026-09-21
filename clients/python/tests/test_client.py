@@ -87,9 +87,10 @@ class ClientTests(unittest.TestCase):
     def test_errors_do_not_echo_server_content_or_credentials(self):
         class Opener:
             def open(self, request, timeout):
-                raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, Reply(json.dumps({"code": "forbidden", "detail": TOKEN}).encode()))
+                raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, Reply(json.dumps({"code": "FORBIDDEN", "detail": TOKEN}).encode()))
         with self.assertRaises(ApiError) as caught:
             Client("https://example.test", TOKEN, opener=Opener()).request("GET", "/api/agent/v1/self")
+        self.assertEqual("FORBIDDEN", caught.exception.code)
         self.assertNotIn(TOKEN, str(caught.exception))
 
     def test_doctor_is_read_only(self):
