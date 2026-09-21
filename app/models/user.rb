@@ -1,26 +1,21 @@
 class User < ApplicationRecord
   include Avatar, Bannable, Bot, Mentionable, Role, Transferable
 
+  has_one :agent_profile, class_name: "AgentNative::Profile", dependent: :restrict_with_exception
+  validate :native_identity_has_no_legacy_authority
+
   has_many :memberships, dependent: :delete_all
   has_many :rooms, through: :memberships
-
   has_many :reachable_messages, through: :rooms, source: :messages
   has_many :messages, dependent: :destroy, foreign_key: :creator_id
-
   has_many :push_subscriptions, class_name: "Push::Subscription", dependent: :delete_all
-
   has_many :boosts, dependent: :destroy, foreign_key: :booster_id
   has_many :searches, dependent: :delete_all
-
   has_many :sessions, dependent: :destroy
   has_many :bans, dependent: :destroy
-
   enum :status, %i[ active deactivated banned ], default: :active
-
   has_secure_password validations: false
-
   after_create_commit :grant_membership_to_open_rooms
-
   scope :ordered, -> { order("LOWER(name)") }
   scope :filtered_by, ->(query) { where("name like ?", "%#{query}%") }
 
@@ -35,12 +30,10 @@ class User < ApplicationRecord
   def deactivate
     transaction do
       close_remote_connections
-
       memberships.without_direct_rooms.delete_all
       push_subscriptions.delete_all
       searches.delete_all
       sessions.delete_all
-
       update! status: :deactivated, email_address: deactived_email_address
     end
   end
@@ -51,7 +44,14 @@ class User < ApplicationRecord
 
   private
     def grant_membership_to_open_rooms
+      return if native_agent?
       Membership.insert_all(Rooms::Open.pluck(:id).collect { |room_id| { room_id: room_id, user_id: id } })
+    end
+
+    def native_identity_has_no_legacy_authority
+      if native_agent? && (!bot? || bot_token.present? || password_digest.present? || email_address.present?)
+        errors.add(:base, "Native agents cannot use legacy or human credentials")
+      end
     end
 
     def deactived_email_address

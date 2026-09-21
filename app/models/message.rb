@@ -1,22 +1,17 @@
 class Message < ApplicationRecord
   include Attachment, Broadcasts, Mentionee, Pagination, Searchable
-
   belongs_to :room, touch: true
   belongs_to :creator, class_name: "User", default: -> { Current.user }
-
   has_many :boosts, dependent: :destroy
-
   has_rich_text :body
-
-  before_create -> { self.client_message_id ||= Random.uuid } # Bots don't care
+  before_update { self.agent_revision += 1 }
+  before_create -> { self.client_message_id ||= Random.uuid }
   after_create_commit -> { room.receive(self) }
-
   scope :ordered, -> { order(:created_at) }
   scope :with_creator, -> { preload(creator: :avatar_attachment) }
   scope :with_attachment_details, -> {
     with_rich_text_body_and_embeds
-    with_attached_attachment
-      .includes(attachment_blob: :variant_records)
+    with_attached_attachment.includes(attachment_blob: :variant_records)
   }
   scope :with_boosts, -> { includes(boosts: :booster) }
 

@@ -1,0 +1,64 @@
+name: Agent stack qualification
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions: {}
+concurrency:
+  group: agent-stack-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Archive committed source for reproducibility
+        run: git archive --format=tar.gz --output=/tmp/source.tar.gz HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: committed-source
+          path: /tmp/source.tar.gz
+          retention-days: 7
+  rails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      redis:
+        image: redis:7.4 # zizmor: ignore[unpinned-images] -- disposable test service
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      RAILS_ENV: test
+      REDIS_URL: redis://127.0.0.1:6379/0
+      PARALLEL_WORKERS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libsqlite3-0 libvips curl ffmpeg
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - run: bin/rails db:prepare test
+      - run: bin/rails test:system
+      - run: bin/brakeman
+      - run: bin/rubocop
+      - name: Portable boot tests
+        run: ruby -Itest -e 'Dir["test/standalone/*_test.rb"].sort.each { |f| require_relative f }'
+      - name: Contract validation
+        run: |
+          python3 -m venv /tmp/contracts
+          /tmp/contracts/bin/pip install -r docs/agent-native/contracts/requirements.txt
+          /tmp/contracts/bin/python script/ci/validate-contracts.py
+      - name: Python client tests when present
+        run: |
+          if test -d clients/python/tests; then
+            PYTHONPATH=clients/python python3 -m unittest discover -s clients/python/tests -v
+          fi
