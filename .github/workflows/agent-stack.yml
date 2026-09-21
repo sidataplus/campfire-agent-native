@@ -46,19 +46,12 @@ jobs:
         with:
           ruby-version: .ruby-version
           bundler-cache: true
-      - run: bin/rails db:prepare test
-      - run: bin/rails test:system
-      - run: bin/brakeman
-      - run: bin/rubocop
-      - name: Portable boot tests
-        run: ruby -Itest -e 'Dir["test/standalone/*_test.rb"].sort.each { |f| require_relative f }'
-      - name: Contract validation
-        run: |
-          python3 -m venv /tmp/contracts
-          /tmp/contracts/bin/pip install -r docs/agent-native/contracts/requirements.txt
-          /tmp/contracts/bin/python script/ci/validate-contracts.py
-      - name: Python client tests when present
-        run: |
-          if test -d clients/python/tests; then
-            PYTHONPATH=clients/python python3 -m unittest discover -s clients/python/tests -v
-          fi
+      - name: Run all qualification groups
+        run: bash script/ci/agent-stack-check.sh
+      - name: Preserve test evidence and suggested formatting patch
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agent-stack-evidence
+          path: tmp/agent-stack/
+          retention-days: 14

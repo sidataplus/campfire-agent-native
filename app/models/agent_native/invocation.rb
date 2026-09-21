@@ -28,6 +28,17 @@ class AgentNative::Invocation < AgentNative::Record
       message = room.messages.find_by(id: source["id"])
       raise AgentNative::Error.new("source_changed", 409) unless message && message.agent_revision == source["revision"] && message.plain_text_body == normalized_input
     end
+    if run_id
+      run = AgentNative::Run.visible_to(profile).find(run_id)
+      run.authorize!(profile)
+      raise AgentNative::Error.new("run_terminal", 409) if run.terminal?
+      raise AgentNative::Error.new("reconciliation_required", 409) if run.needs_reconciliation
+      message = run.run_messages.find_by(id: source["id"])
+      unless source["kind"] == "run_message" && message && message.revision == source["revision"] && message.body_text == normalized_input
+        raise AgentNative::Error.new("source_changed", 409)
+      end
+    end
+    AgentNative::ContextResolver.new(profile: profile, room: room).require_current!(context)
     update!(disposition: input.fetch("disposition"), runtime_operation_id: input.fetch("runtime_operation_id"), version: version + 1)
     AgentNative::Event.publish!(kind: "invocation.#{disposition}", resource: self, room: room, profile: profile, actor: profile)
   end
