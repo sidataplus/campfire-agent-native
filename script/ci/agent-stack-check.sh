@@ -22,9 +22,10 @@ python3 -m venv /tmp/contracts
 check contracts /tmp/contracts/bin/python script/ci/validate-contracts.py
 if test -d clients/python/tests; then
   check python env PYTHONPATH=clients/python python3 -m unittest discover -s clients/python/tests -v
+  check native-http python3 script/ci/native-http-smoke.py
 fi
 # Emit reviewable formatting suggestions, never modify the submitted branch.
 bin/rubocop -a >tmp/agent-stack/style-suggestions.log 2>&1 || true
 git diff -- '*.rb' >tmp/agent-stack/style.patch
-cp db/structure.sql tmp/agent-stack/structure.sql 2>/dev/null || true
+cp db/schema.rb tmp/agent-stack/schema.rb 2>/dev/null || true
 exit "$status"

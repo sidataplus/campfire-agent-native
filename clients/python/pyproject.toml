@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-campfire-client"
+version = "0.1.0"
+description = "Small native Agent Campfire client and durable reference adapter"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+agent-campfire = "agent_campfire_client.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_campfire_client*"]
