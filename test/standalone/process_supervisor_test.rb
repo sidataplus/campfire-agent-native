@@ -7,7 +7,7 @@ require "json"
 class ProcessSupervisorTest < Minitest::Test
   LIBRARY = File.expand_path("../../lib/campfire/process_supervisor", __dir__)
 
-  def run_fixture(prepare_exit: 0, check_exit: 0, probe: "true", redis_exit: nil, web_exit: nil, stop: true)
+  def run_fixture(prepare_exit: 0, check_exit: 0, probe: "true", redis_exit: nil, web_exit: nil, notification_drain: false, stop: true)
     Dir.mktmpdir do |root|
       log = File.join(root, "events")
       worker = File.join(root, "worker.rb")
@@ -18,11 +18,13 @@ class ProcessSupervisorTest < Minitest::Test
         loop { sleep 0.05 }
       RUBY
       command = ->(name, code) { [ RbConfig.ruby, worker, name, code.nil? ? "wait" : code.to_s ] }
+      services = { "redis" => command.call("redis", redis_exit), "web" => command.call("web", web_exit), "workers" => command.call("workers", nil) }
+      services["notification-drain"] = command.call("notification-drain", nil) if notification_drain
       runner = File.join(root, "runner.rb")
       File.write(runner, <<~RUBY)
         require #{LIBRARY.inspect}
         exit Campfire::ProcessSupervisor.new(
-          commands: #{ { "redis" => command.call("redis", redis_exit), "web" => command.call("web", web_exit), "workers" => command.call("workers", nil) }.inspect },
+          commands: #{ services.inspect },
           prepare: #{command.call("prepare", prepare_exit).inspect},
           after_prepare: #{command.call("check", check_exit).inspect},
           probe: -> { #{probe} }, timeout: 0.25, grace: 0.25
@@ -34,7 +36,9 @@ class ProcessSupervisorTest < Minitest::Test
         Timeout.timeout(10) do
           loop do
             events = File.exist?(log) ? File.readlines(log, chomp: true) : []
-            break if %w[ redis prepare check workers web ].all? { |name| events.include?(name) }
+            expected = %w[ redis prepare check workers web ]
+            expected << "notification-drain" if notification_drain
+            break if expected.all? { |name| events.include?(name) }
             sleep 0.02
           end
         end
@@ -57,6 +61,13 @@ class ProcessSupervisorTest < Minitest::Test
       assert_operator events.index("prepare"), :<, events.index("check")
       assert_operator events.index("check"), :<, events.index("workers")
       assert_operator events.index("check"), :<, events.index("web")
+    end
+  end
+
+  def test_optional_notification_drain_starts_after_bootstrap
+    run_fixture(notification_drain: true) do |events, status, _|
+      assert status.success?
+      assert_operator events.index("check"), :<, events.index("notification-drain")
     end
   end
 

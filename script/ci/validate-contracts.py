@@ -130,4 +130,4 @@ report = {"scope": "Documentation validation only; not endpoint or product quali
           "schema_count": len(schemas["$defs"]), "operation_count": len(operations), "fixture_count": len(fixture_results), "checks": checks}
 (OUT / "contract-report.json").write_text(json.dumps(report, indent=2) + "\n")
 print(f"PASS: {len(schemas['$defs'])} schemas, {len(operations)} operations, {len(fixture_results)} fixtures, {len(checks)} documentation checks.")
-print("Assembled OpenAPI: tmp/wp01/openapi.json. Native endpoints remain unimplemented.")
+print("Assembled OpenAPI: tmp/wp01/openapi.json. Documentation checks do not qualify server behavior.")

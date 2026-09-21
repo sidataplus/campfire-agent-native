@@ -1,4 +1,6 @@
 class AgentNative::Notification < AgentNative::Record
+  class DeliverySkipped < StandardError; end
+
   after_create_commit :enqueue_delivery
 
   def self.for_event!(event)

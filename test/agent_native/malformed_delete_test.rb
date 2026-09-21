@@ -19,7 +19,7 @@ class AgentNativeMalformedDeleteTest < ActionDispatch::IntegrationTest
         delete "/api/agent/v1/messages/#{id}", headers: @headers
       end
       assert_response :unprocessable_entity
-      assert_equal "validation_failed", response.parsed_body.fetch("code")
+      assert_equal "VALIDATION_FAILED", response.parsed_body.fetch("code")
     end
   end
 end

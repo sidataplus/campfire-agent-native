@@ -5,7 +5,7 @@ class AgentNative::HumanController < ApplicationController
   rescue_from ActionController::ParameterMissing, JSON::ParserError, with: -> { head :unprocessable_entity }
 
   def create_invocation
-    input = AgentNative::Contract.validate!("HumanRunInput", JSON.parse(request.raw_post))
+    input = AgentNative::Contract.validate!("HumanRunInput", JSON.parse(bounded_raw_post))
     AgentNative::Instance.current.with_lock do
       AgentNative::Instance.current.touch
       room = Current.user.rooms.find(params[:room_id])
@@ -31,13 +31,20 @@ class AgentNative::HumanController < ApplicationController
       response.set_header("Cache-Control", "private, no-store")
     end
 
+    def bounded_raw_post
+      raw = request.body.read(262145)
+      request.body.rewind if request.body.respond_to?(:rewind)
+      raise AgentNative::Error.new("payload_too_large", 413) if raw.bytesize > 262144
+      raw
+    end
+
     def human_write(input)
       AgentNative::WriteReceipt.perform!(principal: "human:#{Current.user.id}", key: request.headers["Idempotency-Key"],
         fingerprint: AgentNative::Canonical.digest([ request.method, request.path, input ])) { yield }
     end
 
     def native_problem(error)
-      render json: { type: "about:blank", title: error.code.humanize, code: error.code,
+      render json: { type: "about:blank", title: error.code.humanize, code: error.code.to_s.upcase,
         status: error.status, request_id: request.request_id }, status: error.status, content_type: "application/problem+json"
     end
 end

@@ -1,0 +1,17 @@
+{
+  "release_status": "implementation_candidate",
+  "native_default": "disabled",
+  "automated_evidence": "Attach reviewed per-commit GitHub Actions results; a written workflow is not a pass.",
+  "manual_gates": [
+    {"id":"railway_ingress_redeploy","status":"not_run"},
+    {"id":"desktop_mobile_pwa_push","status":"not_run"},
+    {"id":"human_accessibility_supervision","status":"not_run"},
+    {"id":"encrypted_off_volume_backup_restore_drill","status":"not_run"},
+    {"id":"upstream_upgrade_and_schema_rollback_rehearsal","status":"not_run"},
+    {"id":"image_vulnerability_disposition_and_immutable_digest","status":"not_run"},
+    {"id":"representative_load_and_24_hour_soak","status":"not_run"},
+    {"id":"a7s_actual_owner_callback_wiring_and_live_pilot","status":"blocked_source_not_accessible"},
+    {"id":"orca_consequential_command_authority","status":"deferred_disabled"},
+    {"id":"rungbee_production_frontend_selection","status":"deferred"}
+  ]
+}

@@ -29,6 +29,7 @@ module Campfire
       check = start("bootstrap-check", @after_prepare)
       wait_success!(check)
       start("workers", @commands.fetch("workers"))
+      start("notification-drain", @commands.fetch("notification-drain")) if @commands.key?("notification-drain")
       start("web", @commands.fetch("web"))
       loop { check_children!; pause }
     rescue Stopped

@@ -7,14 +7,12 @@ require "securerandom"
 require "uri"
 
 module Campfire
-  # Also used before Bundler/Rails boots. Errors contain names, never values.
   class Deployment
     class Invalid < StandardError; end
     HEALTH_PATHS = %w[ /up /healthz /readyz ].freeze
     MODES = %w[ railway external ].freeze
     FLAGS = %w[ CAMPFIRE_AGENT_ENABLED CAMPFIRE_AGENT_DISPATCH_ENABLED ].freeze
     PINNED_SECRETS = %w[ SECRET_KEY_BASE VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY ].freeze
-
     attr_reader :env
 
     def initialize(env = ENV)
@@ -22,8 +20,7 @@ module Campfire
     end
 
     def self.asset_build?
-      ENV["SECRET_KEY_BASE_DUMMY"] == "1" && defined?(Rake) &&
-        Rake.application.top_level_tasks == [ "assets:precompile" ]
+      ENV["SECRET_KEY_BASE_DUMMY"] == "1" && defined?(Rake) && Rake.application.top_level_tasks == [ "assets:precompile" ]
     end
 
     def public_uri
@@ -41,7 +38,7 @@ module Campfire
       raise Invalid, "CAMPFIRE_PUBLIC_URL must use a DNS hostname" unless uri.host.match?(/\A[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\z/) && !uri.host.include?("..")
       raise Invalid, "CAMPFIRE_PUBLIC_URL has an invalid port" unless (1..65535).cover?(uri.port)
       %w[ DISABLE_SSL TLS_DOMAIN THRUSTER_TLS_DOMAIN SECRET_KEY_BASE_DUMMY DATABASE_URL ].each do |key|
-        raise Invalid, "#{key} is incompatible with the WP01 deployment profile" unless env.fetch(key, "").empty?
+        raise Invalid, "#{key} is incompatible with this deployment profile" unless env.fetch(key, "").empty?
       end
       raise Invalid, "SECRET_KEY_BASE must contain at least 64 bytes" if env.fetch("SECRET_KEY_BASE", "").bytesize < 64
       unless env.fetch("CAMPFIRE_RECOVERY_EPOCH", "").match?(/\A[A-Za-z0-9_-]{32,128}\z/)
@@ -50,9 +47,16 @@ module Campfire
       bootstrap = env.fetch("CAMPFIRE_BOOTSTRAP_SECRET", "")
       raise Invalid, "CAMPFIRE_BOOTSTRAP_SECRET must contain 32-4096 bytes" if !bootstrap.empty? && !bootstrap.bytesize.between?(32, 4096)
       FLAGS.each do |key|
-        raise Invalid, "#{key} must remain false: native agents are not implemented in WP01" unless [ "false", "0" ].include?(env.fetch(key, "false"))
+        value = env.fetch(key, "false")
+        raise Invalid, "#{key} must be an explicit boolean" unless %w[ true false 1 0 ].include?(value)
+        if %w[ true 1 ].include?(value) && env["CAMPFIRE_AGENT_EXPERIMENTAL"] != "true"
+          raise Invalid, "Native features require explicit CAMPFIRE_AGENT_EXPERIMENTAL=true qualification opt-in"
+        end
       end
-      raise Invalid, "SKIP_TELEMETRY must remain true in WP01" unless [ "true", "1" ].include?(env.fetch("SKIP_TELEMETRY", "true"))
+      if %w[ true 1 ].include?(env["CAMPFIRE_AGENT_DISPATCH_ENABLED"]) && !%w[ true 1 ].include?(env["CAMPFIRE_AGENT_ENABLED"])
+        raise Invalid, "Dispatch cannot be enabled without native collaboration"
+      end
+      raise Invalid, "SKIP_TELEMETRY must remain true" unless [ "true", "1" ].include?(env.fetch("SKIP_TELEMETRY", "true"))
       raise Invalid, "REDIS_URL must use the bundled loopback Redis" unless [ "redis://127.0.0.1:6379/0", "redis://localhost:6379/0" ].include?(env.fetch("REDIS_URL", "redis://127.0.0.1:6379/0"))
       public_port = port!("CAMPFIRE_LISTEN_PORT", env.fetch("CAMPFIRE_LISTEN_PORT", env.fetch("PORT", "8080")))
       puma_port = port!("CAMPFIRE_PUMA_PORT", env.fetch("CAMPFIRE_PUMA_PORT", "3001"))
@@ -71,19 +75,20 @@ module Campfire
       env["THRUSTER_TARGET_PORT"] = env.fetch("CAMPFIRE_PUMA_PORT", "3001")
       env["THRUSTER_FORWARD_HEADERS"] = "true"
       env["THRUSTER_GZIP_COMPRESSION_DISABLE_ON_AUTH"] = "true"
-      # Do not put secret-bearing request URLs into the proxy's unsanitized logs.
       env["THRUSTER_LOG_REQUESTS"] = "false"
       env["REDIS_URL"] ||= "redis://127.0.0.1:6379/0"
       env["WEB_CONCURRENCY"] ||= "1"
       env["JOB_CONCURRENCY"] ||= "1"
       env["SKIP_TELEMETRY"] = "true"
-      FLAGS.each { |key| env[key] = "false" }
+      FLAGS.each { |key| env[key] = %w[ true 1 ].include?(env[key]) ? "true" : "false" }
       self
     end
 
     def check_storage!(root)
       storage = File.join(root, "storage")
       raise Invalid, "storage must be a real directory" if File.symlink?(storage) || !File.directory?(storage)
+      marker = File.join(storage, ".campfire-restore-incomplete")
+      raise Invalid, "An incomplete restore must be reviewed before startup" if File.exist?(marker) || File.symlink?(marker)
       %w[ db files thruster ].each do |name|
         path = File.join(storage, name)
         raise Invalid, "storage/#{name} must not be a symlink" if File.symlink?(path)

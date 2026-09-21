@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+require "bundler/setup"
+require "optparse"
+require_relative "../lib/campfire/snapshot"
+
+begin
+  options = {}
+  parser = OptionParser.new do |p|
+    p.banner = "Usage: bin/agent-maintenance backup|verify|restore [options]"
+    p.on("--database PATH") { |value| options[:database] = value }
+    p.on("--files PATH") { |value| options[:files] = value }
+    p.on("--source PATH") { |value| options[:source] = value }
+    p.on("--destination PATH") { |value| options[:destination] = value }
+    p.on("--fingerprints PATH") { |value| options[:fingerprints] = value }
+  end
+  command = ARGV.shift
+  parser.parse!
+  abort "Run maintenance as the unprivileged application user" if Process.uid.zero?
+  helper = Campfire::Snapshot.new
+  result = case command
+  when "backup"
+    helper.create!(database: options.fetch(:database), files: options.fetch(:files), destination: options.fetch(:destination),
+      recovery_epoch: ENV.fetch("CAMPFIRE_RECOVERY_EPOCH"), fingerprints: options[:fingerprints])
+  when "verify"
+    helper.verify!(options.fetch(:source))
+    { verified: true }
+  when "restore"
+    helper.restore!(source: options.fetch(:source), destination: options.fetch(:destination), recovery_epoch: ENV.fetch("CAMPFIRE_RECOVERY_EPOCH"))
+  else
+    abort parser.to_s
+  end
+  puts JSON.generate(result)
+rescue Campfire::Snapshot::Invalid, KeyError, OptionParser::ParseError => error
+  warn "Maintenance rejected: #{error.message}"
+  exit 1
+rescue StandardError => error
+  warn "Maintenance failed (#{error.class.name}); keep incomplete restore quarantined and inspect privately"
+  exit 1
+end

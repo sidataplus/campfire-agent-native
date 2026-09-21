@@ -20,9 +20,17 @@ class AgentNative::Attention
     reads = AgentNative::AttentionRead.where(user: human, read: true, item_id: scanned.map(&:id)).pluck(:item_id)
     items = scanned.take(limit).filter_map do |action|
       next unless visible_action?(human, action)
+      next unless current_proposal?(action)
       { id: action.id, room_id: action.room_id.to_s, run_id: action.run_id, action_id: action.id,
         reason: action.kind, title: action.title, read: reads.include?(action.id) }.compact
     end
     { items: items, more: scanned.size > limit, last_id: scanned.take(limit).last&.id }
+  end
+
+  def self.current_proposal?(action)
+    action.current_proposal!
+    true
+  rescue AgentNative::Error, ActiveRecord::RecordNotFound
+    false
   end
 end

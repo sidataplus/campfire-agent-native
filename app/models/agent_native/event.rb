@@ -12,4 +12,64 @@ class AgentNative::Event < ApplicationRecord
       resource: { type: resource_type, id: resource_id }, room_id: room_id.to_s,
       actor: { kind: actor_kind, id: actor_id }.compact, metadata: {} }
   end
+
+  def visible_to_profile?(profile)
+    case resource_type
+    when "run"
+      visible_run?(profile, AgentNative::Run.find_by(id: resource_id))
+    when "run_message"
+      message = AgentNative::RunMessage.find_by(id: resource_id)
+      visible_run?(profile, message&.run)
+    when "activity"
+      activity = AgentNative::Activity.find_by(id: resource_id)
+      visible_run?(profile, activity&.run)
+    when "artifact"
+      artifact = AgentNative::Artifact.find_by(id: resource_id)
+      return false unless artifact
+      return true unless artifact.run
+
+      visible_run?(profile, artifact.run)
+    when "action"
+      action = AgentNative::Action.find_by(id: resource_id)
+      return false unless action
+      return true unless action.run
+
+      visible_run?(profile, action.run)
+    when "invocation"
+      invocation = AgentNative::Invocation.find_by(id: resource_id)
+      return false unless invocation
+      return true unless invocation.run_id
+
+      visible_run?(profile, AgentNative::Run.find_by(id: invocation.run_id))
+    when "receipt"
+      receipt = AgentNative::Receipt.find_by(id: resource_id)
+      return false unless receipt
+
+      case receipt.subject_type
+      when "run"
+        visible_run?(profile, AgentNative::Run.find_by(id: receipt.subject_id))
+      when "action"
+        action = AgentNative::Action.find_by(id: receipt.subject_id)
+        return false unless action
+        return true unless action.run
+
+        visible_run?(profile, action.run)
+      when "invocation"
+        invocation = AgentNative::Invocation.find_by(id: receipt.subject_id)
+        return false unless invocation
+        return true unless invocation.run_id
+
+        visible_run?(profile, AgentNative::Run.find_by(id: invocation.run_id))
+      else
+        true
+      end
+    else
+      true
+    end
+  end
+
+  private
+    def visible_run?(profile, run)
+      !!run && AgentNative::Run.visible_to(profile).where(id: run.id).exists?
+    end
 end

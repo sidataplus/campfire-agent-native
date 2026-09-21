@@ -53,8 +53,47 @@ class AgentNativeAccessTest < ActionDispatch::IntegrationTest
   test "schema validation rejects unknown fields and excessive paging" do
     post "/api/agent/v1/rooms/#{@room.id}/messages", params: { body_text: "x", client_message_id: SecureRandom.uuid, creator_id: users(:david).id }, headers: @headers, as: :json
     assert_response :unprocessable_entity
+    assert_equal "VALIDATION_FAILED", response.parsed_body.fetch("code")
     get "/api/agent/v1/rooms/#{@room.id}/messages?limit=101", headers: @headers
     assert_response :unprocessable_entity
+  end
+
+  test "room context applies an authorized before boundary" do
+    history = 5.times.map { |index| Message.create!(room: @room, creator: users(:david), body: "context #{index}") }
+    boundary = Message.create!(room: @room, creator: users(:david), body: "context boundary")
+    later = Message.create!(room: @room, creator: users(:david), body: "later context")
+
+    get "/api/agent/v1/rooms/#{@room.id}/context", params: { before: boundary.id, limit: 3 }, headers: @headers
+
+    assert_response :success
+    ids = response.parsed_body.fetch("items").map { |item| item.fetch("reference").fetch("id") }
+    assert_equal history.last(3).map { |message| message.id.to_s }, ids
+    refute_includes ids, boundary.id.to_s
+    refute_includes ids, later.id.to_s
+    assert response.parsed_body.fetch("has_more")
+
+    cursor = response.parsed_body.fetch("snapshot_cursor")
+    get "/api/agent/v1/rooms/#{@room.id}/context", params: { before: boundary.id, limit: 3, cursor: cursor }, headers: @headers
+
+    assert_response :success
+    older_ids = response.parsed_body.fetch("items").map { |item| item.fetch("reference").fetch("id") }
+    assert older_ids.all? { |id| id.to_i < history[2].id }
+    assert_empty ids & older_ids
+  end
+
+  test "search uses its own scope and enforces the documented query limit" do
+    Message.create!(room: @room, creator: users(:david), body: "searchable native content")
+    @credential.update!(scopes: [ "search:read" ])
+
+    get "/api/agent/v1/search", params: { room_id: @room.id, query: "searchable native" }, headers: @headers
+
+    assert_response :success
+    assert response.parsed_body.fetch("items").any?
+
+    get "/api/agent/v1/search", params: { room_id: @room.id, query: "x" * 1001 }, headers: @headers
+
+    assert_response :unprocessable_entity
+    assert_equal "VALIDATION_FAILED", response.parsed_body.fetch("code")
   end
 
   test "writes enforce own-message policy and If-Match" do
@@ -121,6 +160,18 @@ class AgentNativeAccessTest < ActionDispatch::IntegrationTest
     @grant.destroy!
     get path, headers: @headers
     assert_response :not_found
+  end
+
+  test "message metadata includes embedded rich text uploads" do
+    blob = ActiveStorage::Blob.create_and_upload!(io: StringIO.new("embedded bytes"), filename: "embedded.txt", content_type: "text/plain")
+    message = Message.create!(room: @room, creator: @profile.user,
+      body: %(<action-text-attachment sgid="#{blob.attachable_sgid}"></action-text-attachment>))
+    embedded_attachment = message.reload.rich_text_body.embeds_attachments.first
+
+    get "/api/agent/v1/messages/#{message.id}", headers: @headers
+
+    assert_response :success
+    assert_includes response.parsed_body.fetch("attachments"), { "type" => "upload", "id" => embedded_attachment.id.to_s }
   end
 
   test "history grant excludes earlier messages and malformed numeric IDs fail closed" do

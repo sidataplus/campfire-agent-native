@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import secrets
 import urllib.parse
 import uuid
 
@@ -25,7 +26,11 @@ class ReferenceWorker:
         journal.bind(instance["instance_id"], instance["stream_epoch"])
         self.identity = instance["instance_id"] + ":" + self.profile["id"]
         if journal.get("consumer") is None:
-            result = self.send("enroll:" + name, "POST", API + "/consumers",
+            enrollment_nonce = journal.get("enrollment_nonce")
+            if enrollment_nonce is None:
+                enrollment_nonce = secrets.token_urlsafe(24)
+                journal.set("enrollment_nonce", enrollment_nonce)
+            result = self.send("enroll:" + enrollment_nonce, "POST", API + "/consumers",
                 {"name": name, "event_types": ["invocation.created", "action.resolved"], "room_ids": []})
             with journal.transaction():
                 journal.set("consumer", result["id"])
