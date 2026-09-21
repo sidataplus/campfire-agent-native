@@ -50,3 +50,6 @@
 
 # Ignore test files
 /test/
+
+# Ignore local deployment evidence and private operator files.
+/temp/

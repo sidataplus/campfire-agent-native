@@ -42,3 +42,6 @@ app/assets/builds/*
 
 # Ignore our exported zipfiles
 /*.zip
+
+# Ignore local deployment evidence and private operator files.
+/temp/
