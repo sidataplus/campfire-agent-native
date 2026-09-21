@@ -77,5 +77,8 @@ class AgentNativeHumanAttentionTest < ActionDispatch::IntegrationTest
     assert_response :created
     assert_equal original, response.parsed_body.fetch("resource").fetch("id")
     assert response.parsed_body.fetch("replayed")
+
+    post "/agent/runs/#{@run.id}/controls", params: payload, headers: headers.except("If-Match")
+    assert_response :precondition_required
   end
 end
