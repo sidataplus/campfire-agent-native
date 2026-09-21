@@ -62,4 +62,23 @@ class AgentNativeHumanAttentionTest < ActionDispatch::IntegrationTest
     assert_response :created
     assert_equal "running", @run.reload.state
   end
+
+  test "a completed control request replays after the run version advances" do
+    headers = { "Content-Type" => "application/json", "Accept" => "application/json",
+      "Idempotency-Key" => SecureRandom.uuid, "If-Match" => %Q("#{@run.id}:#{@run.version}") }
+    payload = { "control" => "cancel", "expected_run_version" => @run.version }.to_json
+
+    post "/agent/runs/#{@run.id}/controls", params: payload, headers: headers
+    assert_response :created
+    original = response.parsed_body.fetch("resource").fetch("id")
+
+    @run.update!(version: @run.version + 1)
+    post "/agent/runs/#{@run.id}/controls", params: payload, headers: headers
+    assert_response :created
+    assert_equal original, response.parsed_body.fetch("resource").fetch("id")
+    assert response.parsed_body.fetch("replayed")
+
+    post "/agent/runs/#{@run.id}/controls", params: payload, headers: headers.except("If-Match")
+    assert_response :precondition_required
+  end
 end

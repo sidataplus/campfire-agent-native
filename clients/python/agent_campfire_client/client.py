@@ -100,7 +100,7 @@ class Client:
                 code = "http_error"
                 try:
                     problem = json.loads(error.read(65536))
-                    if isinstance(problem, dict) and re.fullmatch(r"[a-z0-9_]{1,80}", str(problem.get("code", ""))):
+                    if isinstance(problem, dict) and re.fullmatch(r"[A-Z_]{1,80}", str(problem.get("code", ""))):
                         code = problem["code"]
                 except (ValueError, OSError):
                     pass
