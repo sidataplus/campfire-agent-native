@@ -1,37 +1,50 @@
-# Agent Campfire: WP01
+# Agent Campfire: implementation candidate
 
-This fork is a general-purpose collaboration surface for external notification integrations, deterministic bots and agents. A7s, Orca-ai and Rungbee are reference use cases, not dependencies.
+This fork is a general-purpose collaboration surface for external notification integrations, deterministic bots and task-capable agents. A7s, Orca-ai and Rungbee are reference use cases, not dependencies.
 
-**WP01 implements baseline and deployment safety only. Native agent APIs, identities, runs and dispatch are not implemented or enabled.** The frozen V1 design is a contract for subsequent work, not a list of working endpoints.
+**The WP01–WP08 stack contains the native implementation. Native features remain disabled by default, and the candidate is not production-qualified.** A passing contract validator does not mean every server behavior or live integration has been qualified. Review per-commit CI evidence and the explicit release gates.
 
-## Review map
+## Implementation and review map
 
-- [Baseline manifest](baseline.json): exact upstream, framework and Git dependency pins, intake exception and release gates.
-- [Deployment and rollback](wp01-operations.md): Railway and generic TLS-proxy Docker profiles.
-- [Fork-impact ledger](fork-impact.md): the upstream paths changed and their regression responsibilities.
-- [Frozen contracts](contracts/README.md): 64 schemas, 49 operations, fixtures, state machines and semantic hash guard.
-- [Qualification](qualification.md): commands, actual evidence and remaining manual gates.
+| Package | Implementation | Pull request |
+|---|---|---|
+| WP01 | Pinned baseline, secure boot/proxy/bootstrap and contract freeze | [#1](https://github.com/sidataplus/campfire-agent-native/pull/1) |
+| WP02 | Native identities, effective permissions, bounded conversation/file APIs | [#2](https://github.com/sidataplus/campfire-agent-native/pull/2) |
+| WP03 | Transactional events, replay and explicit human invocations | [#3](https://github.com/sidataplus/campfire-agent-native/pull/3) |
+| WP04 | Owned runs, isolated follow-ups, semantic activity and artifacts | [#4](https://github.com/sidataplus/campfire-agent-native/pull/4) |
+| WP05 | Human questions/approvals, controls and runtime receipts | [#5](https://github.com/sidataplus/campfire-agent-native/pull/5) |
+| WP06 | Human supervision UI, administration and notification intents | [#6](https://github.com/sidataplus/campfire-agent-native/pull/6) |
+| WP07 | Python client/CLI, deterministic worker and runtime bridges | [#7](https://github.com/sidataplus/campfire-agent-native/pull/7) |
+| WP08 | Authenticated snapshots, recovery quarantine and qualification | [#8](https://github.com/sidataplus/campfire-agent-native/pull/8) |
 
-## Implemented boundary
+Review bottom-up. Each PR targets its predecessor; retarget the next child to main only after its parent is merged and ancestry is reconciled. No PR is an instruction to deploy or migrate a live integration.
+
+Start with [stack boundaries](stack.md), the [hardening review](hardening-review.md), [release gates](release-gates.json), [integration handoffs](../../integrations/README.md), and the [Python client](../../clients/python/README.md). The [baseline manifest](baseline.json), [WP01 operations](wp01-operations.md), [fork-impact ledger](fork-impact.md), [WP01 qualification record](qualification.md), and [frozen contracts](contracts/README.md) retain baseline-specific details.
+
+## Authority and reliability
+
+Campfire owns collaboration state, explicit human requests and authenticated intent. External runtimes own admission, execution, domain authorization, private credentials and canonical execution journals. Notification-only integrations need not read history or create runs; short interactions need not become tasks.
+
+A conversation read, message edit, reaction or agent-authored mention never becomes a new human invocation. Run follow-ups bind to an exact run and source revision. Human approval is not execution; cancellation is a request until the runtime acknowledges its actual outcome. A previously approved action admits at most one operation, and repeat delivery uses stable idempotency identity.
+
+## Deployment boundary
+
+The single-service, single-volume profile preserves the ordered startup boundary:
 
 ```text
-mounted volume checked / root-owned permissions initialized
+mounted volume checked / narrowly scoped ownership initialization
     -> privilege drop to UID/GID 1000
     -> environment and persistent-secret preflight
     -> bundled loopback Redis ready
     -> db:prepare on mounted storage
-    -> first-administrator configuration check
+    -> first-administrator and recovery checks
     -> workers + Thrust/Puma
 ```
 
-An unexpected web/worker/Redis exit stops the other process groups and returns nonzero. A migration or bootstrap-check failure never starts web/workers. A deployment must use one replica, keep the persistent volume and preserve its instance secrets.
+Preserve stable instance secrets and use one replica. Initial setup requires an owner-held body-only secret; remove it after administrator creation. Existing human sign-in and private invite-code behavior remain in place. No SSO or clinical-data governance is implied.
 
-The first administrator is created through the existing setup form plus an owner-supplied body-only secret. The existing account singleton constraint and one database transaction make account/admin/room creation atomic. The secret is never rendered or stored as a URL. After setup, remove the bootstrap secret from deployment configuration. Ordinary upstream sign-in and invite-code behavior remain in place.
+Native enablement requires explicit experimental configuration and recovery reconciliation. Installing the fork grants no Orca action authority and does not start A7s or select Rungbee's frontend. A snapshot is authenticated, not encrypted: backup encryption and custody of the original instance key are separate operator responsibilities.
 
-Invite codes are bearer invitations, not an unrestricted public signup page. Keep them private and rotate a disclosed code. WP01 does not add SSO, approval-based invitations, native credential administration or clinical-data governance.
+## Remaining qualification
 
-## Development
-
-Ordinary local Rails development remains the upstream workflow. The production `bin/boot` and Docker profile intentionally require the new deployment contract. Tests without a configured setup secret preserve upstream developer setup behavior; production always requires the gate.
-
-Do not set either native feature flag to true: production startup rejects it. No Orca action authority or A7s execution capability is granted by installing this fork.
+The live A7s owner callback and pilot require its actual source integration. Real Railway ingress/redeployment, target-device push and accessibility, operator off-volume restore/rollback, representative load/24-hour soak, and release-image security review remain tracked explicitly. Orca consequential commands are deferred and disabled; its ClickClack deployment remains unchanged. Rungbee has compatibility fixtures, not a production migration.
