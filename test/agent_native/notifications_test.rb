@@ -14,5 +14,4 @@ class AgentNativeNotificationsTest < ActiveSupport::TestCase
 
     assert_raises(AgentNative::Notification::DeliverySkipped) { notification.deliver }
   end
-
 end

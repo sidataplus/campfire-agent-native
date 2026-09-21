@@ -37,7 +37,7 @@ class ProcessSupervisorTest < Minitest::Test
           loop do
             events = File.exist?(log) ? File.readlines(log, chomp: true) : []
             expected = %w[ redis prepare check workers web ]
-            expected << "notification-drain" if #{notification_drain.inspect}
+            expected << "notification-drain" if notification_drain
             break if expected.all? { |name| events.include?(name) }
             sleep 0.02
           end

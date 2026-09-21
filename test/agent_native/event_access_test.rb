@@ -44,7 +44,7 @@ class AgentNativeEventAccessTest < ActionDispatch::IntegrationTest
     @profile.room_grants.create!(room: rooms(:designers), history_policy: "all_authorized")
     get "/api/agent/v1/events", params: { consumer_id: @consumer.id, cursor: old_cursor }, headers: @headers
     assert_response :conflict
-    assert_equal "access_changed", response.parsed_body.fetch("code")
+    assert_equal "ACCESS_CHANGED", response.parsed_body.fetch("code")
   end
 
   test "recovery quarantine blocks replay without advancing the consumer" do
@@ -53,7 +53,7 @@ class AgentNativeEventAccessTest < ActionDispatch::IntegrationTest
     Message.create!(room: @room, creator: users(:david), body: "quarantined")
     get "/api/agent/v1/events", params: { consumer_id: @consumer.id, cursor: @consumer.cursor }, headers: @headers
     assert_response :conflict
-    assert_equal "recovery_required", response.parsed_body.fetch("code")
+    assert_equal "RECOVERY_REQUIRED", response.parsed_body.fetch("code")
     assert_equal previous, @consumer.reload.delivered
   end
 

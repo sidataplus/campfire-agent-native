@@ -38,9 +38,9 @@ class AgentNative::Event < ApplicationRecord
     when "invocation"
       invocation = AgentNative::Invocation.find_by(id: resource_id)
       return false unless invocation
-      return true unless invocation.run
+      return true unless invocation.run_id
 
-      visible_run?(profile, invocation.run)
+      visible_run?(profile, AgentNative::Run.find_by(id: invocation.run_id))
     when "receipt"
       receipt = AgentNative::Receipt.find_by(id: resource_id)
       return false unless receipt
@@ -57,9 +57,9 @@ class AgentNative::Event < ApplicationRecord
       when "invocation"
         invocation = AgentNative::Invocation.find_by(id: receipt.subject_id)
         return false unless invocation
-        return true unless invocation.run
+        return true unless invocation.run_id
 
-        visible_run?(profile, invocation.run)
+        visible_run?(profile, AgentNative::Run.find_by(id: invocation.run_id))
       else
         true
       end
