@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from agent_campfire_client import Journal, RecoveryRequired, TransportError
+from agent_campfire_client.worker import ReferenceWorker
 
 
 class JournalTests(unittest.TestCase):
@@ -72,6 +73,33 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(1, len(server.results))
         with self.assertRaises(ValueError):
             self.journal.write(server, "POST", "/api/agent/v1/rooms/1/messages", {"body_text": "changed"}, key=key)
+
+    def test_enrollment_key_is_unique_to_each_journal(self):
+        class Server:
+            def __init__(self): self.keys = []
+            def doctor(server):
+                return {"instance": {"instance_id": "instance", "stream_epoch": "epoch"}, "profile": {"id": "profile"}}
+            def request(server, method, path, body, *, key, etag=None):
+                server.keys.append(key)
+                return {"id": "consumer-" + str(len(server.keys)), "cursor": "cursor"}
+
+        server = Server()
+        with tempfile.TemporaryDirectory() as directory:
+            first_path = Path(directory) / "first"
+            first = Journal(first_path)
+            ReferenceWorker(server, first, "same-name")
+            first_nonce = first.get("enrollment_nonce")
+            first.close()
+
+            second_path = Path(directory) / "second"
+            second = Journal(second_path)
+            ReferenceWorker(server, second, "same-name")
+            second_nonce = second.get("enrollment_nonce")
+            second.close()
+
+        self.assertIsNotNone(first_nonce)
+        self.assertNotEqual(first_nonce, second_nonce)
+        self.assertNotEqual(server.keys[0], server.keys[1])
 
     def test_private_directory_required(self):
         public = Path(self.temporary.name) / "public"

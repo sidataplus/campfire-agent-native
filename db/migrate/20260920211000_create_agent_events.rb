@@ -64,16 +64,27 @@ class CreateAgentEvents < ActiveRecord::Migration[8.2]
         UPDATE messages SET agent_revision = agent_revision + 1 WHERE id = NEW.record_id;
       END;
     SQL
-    %w[INSERT DELETE UPDATE].each do |operation|
+    %w[INSERT DELETE].each do |operation|
       row = operation == "DELETE" ? "OLD" : "NEW"
       execute <<~SQL
-        CREATE TRIGGER agent_membership_#{operation.downcase} AFTER #{operation == "UPDATE" ? "UPDATE OF room_id, user_id" : operation} ON memberships BEGIN
+        CREATE TRIGGER agent_membership_#{operation.downcase} AFTER #{operation} ON memberships BEGIN
           UPDATE agent_profiles SET authorization_version = authorization_version + 1 WHERE user_id = #{row}.user_id;
           INSERT INTO agent_events(event_uuid, kind, resource_type, resource_id, room_id, actor_kind, created_at, updated_at)
           VALUES(#{uuid}, 'room.membership.changed', 'room', CAST(#{row}.room_id AS TEXT), #{row}.room_id, 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
         END;
       SQL
     end
+    execute <<~SQL
+      CREATE TRIGGER agent_membership_update AFTER UPDATE OF room_id, user_id ON memberships BEGIN
+        UPDATE agent_profiles SET authorization_version = authorization_version + 1
+        WHERE user_id = OLD.user_id OR user_id = NEW.user_id;
+        INSERT INTO agent_events(event_uuid, kind, resource_type, resource_id, room_id, actor_kind, created_at, updated_at)
+        VALUES(#{uuid}, 'room.membership.changed', 'room', CAST(OLD.room_id AS TEXT), OLD.room_id, 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO agent_events(event_uuid, kind, resource_type, resource_id, room_id, actor_kind, created_at, updated_at)
+        SELECT #{uuid}, 'room.membership.changed', 'room', CAST(NEW.room_id AS TEXT), NEW.room_id, 'system', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        WHERE NEW.room_id != OLD.room_id;
+      END;
+    SQL
   end
 
   def down

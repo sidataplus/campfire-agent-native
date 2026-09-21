@@ -68,6 +68,13 @@ class AgentNativeDecisionsTest < ActiveSupport::TestCase
     assert_equal "pending", @action.reload.state
   end
 
+  test "stale proposals are excluded from attention" do
+    @run.increment!(:version)
+
+    assert_empty AgentNative::Attention.page(@human)[:items]
+    assert_equal "pending", @action.reload.state
+  end
+
   test "custom fields cannot introduce executable or remote schemas" do
     assert_raises(AgentNative::Error) { AgentNative::ActionInput.validate_schema!({ "$ref" => "https://example.test/schema" }) }
     assert_raises(AgentNative::Error) { AgentNative::ActionInput.validate!({ "type" => "object", "properties" => { "count" => { "type" => "integer", "maximum" => 3 } } }, { "count" => 4 }) }

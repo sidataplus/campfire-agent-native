@@ -54,6 +54,10 @@ class AgentNativeRecoveryTest < ActiveSupport::TestCase
       db.close
       snapshot = Campfire::Snapshot.new(secret: "s" * 64)
       backup = File.join(root, "backup")
+      assert_raises(Campfire::Snapshot::Invalid) do
+        snapshot.create!(database: source, files: files, destination: backup, recovery_epoch: SecureRandom.hex(32))
+      end
+      assert_not File.exist?(backup)
       snapshot.create!(database: source, files: files, destination: backup, recovery_epoch: epoch)
       assert_equal 2, snapshot.verify!(backup).fetch("files").size
       assert_raises(Campfire::Snapshot::Invalid) { Campfire::Snapshot.new(secret: "t" * 64).verify!(backup) }

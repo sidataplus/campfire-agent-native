@@ -29,6 +29,7 @@ module AgentNativeEventApi
       # Enrollment floors and authority versions, not timestamp precision, bound replay.
       next false if consumer.room_ids.any? && !consumer.room_ids.include?(event.room_id.to_s)
       next false if event.profile_id && event.profile_id != @profile.id
+      next false unless event.visible_to_profile?(@profile)
       next false if consumer.event_types.any? && !consumer.event_types.include?(event.kind)
       next false if event.kind.start_with?("message.") && !scopes.include?("messages:read")
       next false if event.kind.start_with?("invocation.") && !scopes.include?("invocations:read")

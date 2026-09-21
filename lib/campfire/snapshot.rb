@@ -43,6 +43,9 @@ module Campfire
       entries = [ file_entry(stage, "db/#{db_name}") ]
       metadata = with_database(copy_db, readonly: true) do |db|
         check_database!(db)
+        stored_digest = db.get_first_value("SELECT recovery_digest FROM agent_instances WHERE id=1")
+        supplied_digest = Digest::SHA256.hexdigest(recovery_epoch)
+        raise Invalid, "Recovery epoch does not match the snapshotted database" unless stored_digest == supplied_digest
         blobs = db.execute("SELECT key, byte_size, checksum, service_name FROM active_storage_blobs")
         raise Invalid, "Snapshot file limit exceeded" if blobs.size > MAX_FILES
         blobs.each do |key, size, checksum, service|

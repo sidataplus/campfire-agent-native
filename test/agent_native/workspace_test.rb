@@ -29,6 +29,36 @@ class AgentNativeWorkspaceTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
   end
 
+  test "admin rejects a manifest without a name before provisioning" do
+    manifest = {
+      "protocol_version" => "1",
+      "requested_scopes" => [],
+      "action_types" => [],
+      "capabilities" => {
+        "modes" => [ "notification" ], "supports_cancel" => false, "supports_pause" => false,
+        "supports_resume" => false, "supports_followup" => false, "supports_artifacts" => false,
+        "activity_kinds" => []
+      }
+    }
+
+    assert_no_difference -> { AgentNative::Profile.count } do
+      post "/agent/admin", params: { manifest: JSON.generate(manifest) }
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "workspace field coercion accepts only canonical primitive strings" do
+    controller = AgentNative::WorkspaceController.new
+    schema = { "properties" => {
+      "count" => { "type" => "integer" }, "ratio" => { "type" => "number" }, "enabled" => { "type" => "boolean" }
+    } }
+
+    assert_equal({ "count" => 2, "ratio" => 1.5, "enabled" => false },
+      controller.send(:typed_fields, schema, { "count" => "2", "ratio" => "1.5", "enabled" => "false" }))
+    assert_raises(AgentNative::Error) { controller.send(:typed_fields, schema, { "count" => "2.0" }) }
+    assert_raises(AgentNative::Error) { controller.send(:typed_fields, schema, { "enabled" => "yes" }) }
+  end
+
   test "read-only render never accepts an agent bearer in place of a human" do
     get "/agent/workspace", headers: { "Authorization" => "Bearer acn_#{'x' * 43}" }
     assert_response :forbidden

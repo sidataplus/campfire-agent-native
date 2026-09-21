@@ -95,15 +95,23 @@ class AgentNative::ApiController < ActionController::API
 
   def get_room_context
     room = room!(params[:room_id], "messages:read")
-    result = page(history(room)) { |m| { reference: { kind: "message", id: m.id.to_s, revision: m.agent_revision, source_room_id: room.id.to_s }, availability: "available", body_text: m.plain_text_body } }
+    scope = history(room)
+    if params[:before].present?
+      before = params[:before].to_s
+      raise AgentNative::Error.new("validation_failed") unless before.match?(/\A[0-9]{1,24}\z/)
+      boundary = scope.find_by(id: before)
+      raise ActiveRecord::RecordNotFound unless boundary
+      scope = scope.where("messages.id < ?", boundary.id)
+    end
+    direction = params[:before].present? ? :desc : :asc
+    result = page(scope, direction: direction) { |m| { reference: { kind: "message", id: m.id.to_s, revision: m.agent_revision, source_room_id: room.id.to_s }, availability: "available", body_text: m.plain_text_body } }
     render json: { items: result[:items], snapshot_cursor: result[:page][:next_cursor] || Rails.application.message_verifier("agent-context").generate(Time.current.iso8601, purpose: @profile.id, expires_in: 30.minutes), has_more: result[:page][:has_more] }
   end
 
   def search_messages
-    @profile.authorize!(@credential, "messages:read")
     room = room!(params.require(:room_id), "search:read")
-    q = params.require(:q).to_s
-    raise AgentNative::Error.new("validation_failed") unless q.length.between?(1, 200)
+    q = params.require(:query).to_s
+    raise AgentNative::Error.new("validation_failed") unless q.length.between?(1, 1000)
     scope = history(room).joins(:rich_text_body).where("action_text_rich_texts.body LIKE ?", "%#{Message.sanitize_sql_like(q)}%")
     render json: page(scope) { |m| message_json(m) }
   end
@@ -186,9 +194,13 @@ class AgentNative::ApiController < ActionController::API
     end
 
     def message_json(message)
-      attachments = []
-      if @credential.effective_scopes.include?("attachments:read") && message.attachment.attached?
-        attachments << { type: "upload", id: message.attachment_attachment.id.to_s }
+      attachments = if @credential.effective_scopes.include?("attachments:read")
+        records = []
+        records << message.attachment_attachment if message.attachment.attached?
+        records.concat(message.rich_text_body&.embeds_attachments&.to_a || [])
+        records.compact.uniq(&:id).first(16).map { |attachment| { type: "upload", id: attachment.id.to_s } }
+      else
+        []
       end
       { id: message.id.to_s, room_id: message.room_id.to_s, creator_user_id: message.creator_id.to_s,
         creator_kind: message.creator.native_agent? ? "agent" : (message.creator.bot? ? "legacy_bot" : "human"),
@@ -206,18 +218,20 @@ class AgentNative::ApiController < ActionController::API
       raise AgentNative::Error.new("version_conflict", 412) unless request.headers["If-Match"] == etag(record)
     end
 
-    def page(scope)
+    def page(scope, direction: :asc)
       size = Integer(params.fetch(:limit, 50).to_s, 10) rescue 0
       raise AgentNative::Error.new("validation_failed") unless size.between?(1, 100)
       if params[:cursor].present?
         cursor = Rails.application.message_verifier("agent-page").verified(params[:cursor], purpose: page_purpose)
         raise AgentNative::Error.new("invalid_cursor", 409) unless cursor
-        scope = scope.where("#{scope.klass.table_name}.id > ?", cursor)
+        comparison = direction == :desc ? "<" : ">"
+        scope = scope.where("#{scope.klass.table_name}.id #{comparison} ?", cursor)
       end
-      rows = scope.reorder(:id).limit(size + 1).to_a
+      rows = scope.reorder(direction == :desc ? { id: :desc } : :id).limit(size + 1).to_a
       more = rows.size > size
-      items = rows.take(size)
-      cursor = more ? Rails.application.message_verifier("agent-page").generate(items.last.id, purpose: page_purpose, expires_in: 30.minutes) : nil
+      items = direction == :desc ? rows.take(size).reverse : rows.take(size)
+      cursor_id = direction == :desc ? items.first&.id : items.last&.id
+      cursor = more ? Rails.application.message_verifier("agent-page").generate(cursor_id, purpose: page_purpose, expires_in: 30.minutes) : nil
       { items: items.map { |r| yield(r) }, page: { next_cursor: cursor, has_more: more } }
     end
 
@@ -250,7 +264,7 @@ class AgentNative::ApiController < ActionController::API
     end
 
     def problem(error)
-      render json: { type: "about:blank", title: error.code.humanize, code: error.code,
+      render json: { type: "about:blank", title: error.code.humanize, code: error.code.to_s.upcase,
         status: error.status, request_id: request.request_id }, status: error.status, content_type: "application/problem+json"
     end
 end

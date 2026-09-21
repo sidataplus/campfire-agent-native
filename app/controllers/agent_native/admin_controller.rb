@@ -11,6 +11,7 @@ class AgentNative::AdminController < ApplicationController
 
   def create
     manifest = JSON.parse(params.require(:manifest).to_s)
+    AgentNative::Contract.validate!("IntegrationManifest", manifest)
     AgentNative::Administration.change!(Current.user) do
       AgentNative::Profile.provision!(name: manifest.fetch("name"), manifest: manifest)
     end

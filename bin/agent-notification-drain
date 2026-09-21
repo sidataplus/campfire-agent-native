@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+require "bundler/setup"
+require_relative "../config/environment"
+
+abort "Run notification maintenance as the unprivileged application user" if Process.uid.zero?
+
+interval = Float(ENV.fetch("CAMPFIRE_NOTIFICATION_DRAIN_INTERVAL", "30"))
+abort "CAMPFIRE_NOTIFICATION_DRAIN_INTERVAL must be at least one second" unless interval.finite? && interval >= 1
+
+loop do
+  AgentNative::Notification.drain!
+  sleep interval
+end

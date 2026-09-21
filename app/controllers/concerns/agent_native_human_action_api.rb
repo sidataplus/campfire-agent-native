@@ -21,6 +21,9 @@ module AgentNativeHumanActionApi
       AgentNative::Instance.current.touch
       run = AgentNative::Run.where(room_id: Current.user.rooms.select(:id)).find(params[:run_id])
       raise AgentNative::Error.new("forbidden", 403) unless run.owner_profile.operator?(Current.user, run.room)
+      expected_etag = %Q("#{run.id}:#{run.version}")
+      raise AgentNative::Error.new("precondition_required", 428) unless request.headers["If-Match"]
+      raise AgentNative::Error.new("version_conflict", 412) unless request.headers["If-Match"] == expected_etag
       result = human_write(input) do
         receipt = AgentNative::Control.request!(run, Current.user, input)
         { "type" => "receipt", "id" => receipt.id }
@@ -43,10 +46,16 @@ module AgentNativeHumanActionApi
 
   def mark_attention_read
     input = AgentNative::Contract.validate!("ReadMarker", JSON.parse(request.raw_post))
-    action = AgentNative::Action.find(params[:item_id])
-    raise AgentNative::Error.new("forbidden", 403) unless AgentNative::Attention.visible_action?(Current.user, action)
-    marker = AgentNative::AttentionRead.find_or_initialize_by(user: Current.user, item_id: action.id)
-    marker.update!(read: input.fetch("read"))
-    render json: { ok: true }
+    AgentNative::Instance.current.with_lock do
+      AgentNative::Instance.current.touch
+      action = AgentNative::Action.find(params[:item_id])
+      raise AgentNative::Error.new("forbidden", 403) unless AgentNative::Attention.visible_action?(Current.user, action)
+      result = human_write(input) do
+        marker = AgentNative::AttentionRead.find_or_initialize_by(user: Current.user, item_id: action.id)
+        marker.update!(read: input.fetch("read"))
+        { "ok" => true }
+      end
+      render json: result.fetch("resource"), status: :created
+    end
   end
 end

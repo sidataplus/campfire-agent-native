@@ -1,6 +1,7 @@
 class AgentNative::Run < AgentNative::Record
   belongs_to :room
   belongs_to :owner_profile, class_name: "AgentNative::Profile"
+  belongs_to :outcome_receipt, class_name: "AgentNative::Receipt", optional: true
   belongs_to :parent_run, class_name: "AgentNative::Run", optional: true
   has_many :participants, dependent: :destroy
   has_many :run_messages, dependent: :destroy
@@ -42,7 +43,12 @@ class AgentNative::Run < AgentNative::Record
     raise AgentNative::Error.new("stale_revision", 409) unless input.fetch("source_revision") > source_revision
     target = input.fetch("state")
     raise AgentNative::Error.new("invalid_transition", 409) unless target == state || TRANSITIONS.fetch(state, []).include?(target)
-    update!(state: target, source_revision: input.fetch("source_revision"), summary: input["summary"], version: version + 1, last_reported_at: Time.current)
+    outcome_receipt = outcome_receipt_for!(profile, input["outcome_receipt_id"]) if input.key?("outcome_receipt_id")
+    raise AgentNative::Error.new("invalid_outcome_receipt", 409) if outcome_receipt && !terminal_state?(target)
+    attributes = { state: target, source_revision: input.fetch("source_revision"), summary: input["summary"],
+      version: version + 1, last_reported_at: Time.current }
+    attributes[:outcome_receipt] = outcome_receipt if input.key?("outcome_receipt_id")
+    update!(attributes)
     AgentNative::Event.publish!(kind: "run.updated", resource: self, room: room, actor: profile)
   end
 
@@ -84,4 +90,19 @@ class AgentNative::Run < AgentNative::Record
       parent_run_id: parent_run_id, invocation_id: invocation_id, session_ref: session_ref,
       last_reported_at: last_reported_at.iso8601, needs_reconciliation: needs_reconciliation, context: context }.compact
   end
+
+  private
+    def terminal_state?(value)
+      TERMINAL.include?(value)
+    end
+
+    def outcome_receipt_for!(profile, receipt_id)
+      return if receipt_id.blank?
+
+      receipt = AgentNative::Receipt.find_by(id: receipt_id, profile: profile, room: room,
+        subject_type: "run", subject_id: id, kind: "outcome")
+      raise AgentNative::Error.new("invalid_outcome_receipt", 409) unless receipt
+
+      receipt
+    end
 end

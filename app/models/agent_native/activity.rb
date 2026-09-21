@@ -2,6 +2,8 @@ class AgentNative::Activity < AgentNative::Record
   belongs_to :run
   belongs_to :profile
 
+  TERMINAL_STATES = %w[ completed failed cancelled ].freeze
+
   def self.report!(run, profile, input)
     run.authorize!(profile, contribution: "activity")
     raise AgentNative::Error.new("run_terminal", 409) if run.terminal?
@@ -9,7 +11,7 @@ class AgentNative::Activity < AgentNative::Record
     activity = find_or_initialize_by(run: run, profile: profile, operation_id: input.fetch("operation_id"))
     if activity.persisted?
       raise AgentNative::Error.new("stale_revision", 409) unless input.fetch("source_revision") > activity.operation.fetch("source_revision")
-      if %w[ succeeded failed cancelled ].include?(activity.operation["state"]) && activity.operation["state"] != input["state"]
+      if TERMINAL_STATES.include?(activity.operation["state"]) && activity.operation["state"] != input["state"]
         raise AgentNative::Error.new("invalid_transition", 409)
       end
     end

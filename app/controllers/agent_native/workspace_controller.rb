@@ -60,8 +60,9 @@ class AgentNative::WorkspaceController < ApplicationController
       AgentNative::Instance.current.touch
       action = AgentNative::Action.find(params.require(:action_id))
       raise AgentNative::Error.new("forbidden", 403) unless AgentNative::Attention.visible_action?(Current.user, action)
-      values = typed_fields(action.input_schema, params.fetch(:fields, {}).to_unsafe_h)
-      input = { "proposal_digest" => params.require(:proposal_digest).to_s, "decision" => params.require(:decision).to_s, "input" => values }
+      decision = params.require(:decision).to_s
+      values = decision == "reject" ? {} : typed_fields(action.input_schema, params.fetch(:fields, {}).to_unsafe_h)
+      input = { "proposal_digest" => params.require(:proposal_digest).to_s, "decision" => decision, "input" => values }
       AgentNative::Contract.validate!("HumanDecision", input)
       human_transaction(input) do
         raise AgentNative::Error.new("version_conflict", 409) unless params[:version].to_s == action.version.to_s
@@ -77,7 +78,11 @@ class AgentNative::WorkspaceController < ApplicationController
       AgentNative::Instance.current.touch
       run = visible_run
       raise AgentNative::Error.new("forbidden", 403) unless run.owner_profile.operator?(Current.user, run.room)
-      input = { "control" => params.require(:control).to_s, "expected_run_version" => Integer(params.require(:version).to_s, 10) }
+      input = begin
+        { "control" => params.require(:control).to_s, "expected_run_version" => strict_integer(params.require(:version)) }
+      rescue ArgumentError, TypeError
+        raise AgentNative::Error.new("validation_failed", 422)
+      end
       AgentNative::Contract.validate!("HumanControl", input)
       human_transaction(input) do
         receipt = AgentNative::Control.request!(run, Current.user, input)
@@ -130,16 +135,28 @@ class AgentNative::WorkspaceController < ApplicationController
     def typed_fields(schema, raw)
       fields = schema.fetch("properties", {})
       raise AgentNative::Error.new("validation_failed", 422) unless (raw.keys - fields.keys).empty?
-      raw.transform_values.with_index { |value, _| value }.each_with_object({}) do |(key, value), result|
+      raw.each_with_object({}) do |(key, value), result|
+        raise ArgumentError unless value.is_a?(String)
         result[key] = case fields.fetch(key).fetch("type")
-        when "integer" then Integer(value.to_s, 10)
-        when "number" then Float(value.to_s)
-        when "boolean" then value == "true"
-        else value.to_s
+        when "integer" then strict_integer(value)
+        when "number"
+          raise ArgumentError unless value.match?(/\A-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\z/)
+          number = Float(value)
+          raise ArgumentError unless number.finite?
+          number
+        when "boolean"
+          raise ArgumentError unless %w[ true false ].include?(value)
+          value == "true"
+        else value
         end
       end
-    rescue ArgumentError, TypeError
+    rescue ArgumentError, TypeError, KeyError
       raise AgentNative::Error.new("validation_failed", 422)
+    end
+
+    def strict_integer(value)
+      raise ArgumentError unless value.is_a?(String) && value.match?(/\A-?(?:0|[1-9][0-9]*)\z/)
+      Integer(value, 10)
     end
 
     def show_error(error)

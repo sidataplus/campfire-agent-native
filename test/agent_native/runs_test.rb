@@ -20,6 +20,38 @@ class AgentNativeRunsTest < ActiveSupport::TestCase
     AgentNative::Contract.validate!("Run", @run.wire.deep_stringify_keys)
   end
 
+  test "completed activity operations cannot be changed" do
+    input = { "operation_id" => "step-1", "kind" => "analysis", "state" => "completed", "summary" => "Finished",
+      "evidence" => [], "owner_generation" => 1, "source_revision" => 1 }
+    AgentNative::Activity.report!(@run, @profile, input)
+
+    assert_raises(AgentNative::Error) do
+      AgentNative::Activity.report!(@run, @profile, input.merge("state" => "running", "source_revision" => 2))
+    end
+  end
+
+  test "terminal run updates persist and validate their outcome receipt" do
+    receipt = AgentNative::Receipt.record_runtime!(@profile, {
+      "kind" => "outcome", "subject" => { "type" => "run", "id" => @run.id },
+      "runtime_operation_id" => "run-op-1", "result" => "succeeded", "evidence" => [],
+      "owner_generation" => @run.owner_generation, "source_revision" => 2
+    })
+
+    @run.project!(@profile, { "state" => "completed", "owner_generation" => 1, "source_revision" => 2,
+      "outcome_receipt_id" => receipt.id })
+
+    assert_equal receipt.id, @run.reload.outcome_receipt_id
+    AgentNative::Contract.validate!("Run", @run.wire.deep_stringify_keys)
+  end
+
+  test "run outcome receipt must belong to the projected run" do
+    assert_raises(AgentNative::Error) do
+      @run.project!(@profile, { "state" => "completed", "owner_generation" => 1, "source_revision" => 2,
+        "outcome_receipt_id" => SecureRandom.uuid })
+    end
+    assert_equal "running", @run.reload.state
+  end
+
   test "run conversations never become ordinary room messages" do
     other = AgentNative::Run.project_new!(@profile, @input.merge("external_run_id" => SecureRandom.uuid))
     assert_no_difference -> { Message.count } do
